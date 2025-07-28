@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,7 +14,7 @@ const Notifications = () => {
     setLoading(true);
     setError("");
     const token = localStorage.getItem("session_token");
-    fetch("http://localhost:5000/notifications", {
+    fetch(`${API_URL}/notifications`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => res.json())
@@ -29,7 +32,7 @@ const Notifications = () => {
 
   const markAsRead = async (id) => {
     const token = localStorage.getItem("session_token");
-    const res = await fetch(`http://localhost:5000/notifications/${id}/read`, {
+    const res = await fetch(`${API_URL}/notifications/${id}/read`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });

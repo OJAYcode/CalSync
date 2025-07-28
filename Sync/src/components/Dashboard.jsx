@@ -15,6 +15,9 @@ import {
 } from "lucide-react";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Dashboard = ({ logout }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -61,7 +64,7 @@ const Dashboard = ({ logout }) => {
     const fetchStats = async () => {
       try {
         const token = localStorage.getItem("session_token");
-        const response = await fetch("http://localhost:5000/events/stats", {
+        const response = await fetch(`${API_URL}/events/stats`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -78,7 +81,7 @@ const Dashboard = ({ logout }) => {
         } else {
           // Fallback to events endpoint if stats endpoint not available
           const eventsResponse = await fetch(
-            "http://localhost:5000/events",
+            `${API_URL}/events`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -129,7 +132,7 @@ const Dashboard = ({ logout }) => {
     const fetchNotifications = async () => {
       try {
         const token = localStorage.getItem("session_token");
-        const res = await fetch("http://localhost:5000/notifications", {
+        const res = await fetch(`${API_URL}/notifications`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -150,7 +153,7 @@ const Dashboard = ({ logout }) => {
   const fetchEvents = async () => {
     try {
       const token = localStorage.getItem("session_token");
-      const response = await fetch("http://localhost:5000/events", {
+      const response = await fetch(`${API_URL}/events`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -175,7 +178,7 @@ const Dashboard = ({ logout }) => {
     setFeedLoading(true);
     setFeedError("");
     try {
-      const res = await fetch("http://localhost:5000/department-feeds", {
+      const res = await fetch(`${API_URL}/department-feeds`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("session_token")}` },
       });
       const data = await res.json();
@@ -201,7 +204,7 @@ const Dashboard = ({ logout }) => {
     }
     setFeedLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/department-feeds", {
+      const res = await fetch(`${API_URL}/department-feeds`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -229,7 +232,7 @@ const Dashboard = ({ logout }) => {
     setFeedError("");
     setFeedSuccess("");
     try {
-      const res = await fetch(`http://localhost:5000/department-feeds/${id}`, {
+      const res = await fetch(`${API_URL}/department-feeds/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${localStorage.getItem("session_token")}` },
       });
@@ -248,7 +251,7 @@ const Dashboard = ({ logout }) => {
 
   const markAsRead = async (id) => {
     const token = localStorage.getItem("session_token");
-    await fetch(`http://localhost:5000/notifications/${id}/read`, {
+    await fetch(`${API_URL}/notifications/${id}/read`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -260,7 +263,7 @@ const Dashboard = ({ logout }) => {
     if (!window.confirm("Delete this event?")) return;
     try {
       const token = localStorage.getItem("session_token");
-      const res = await fetch(`http://localhost:5000/events/${id}`, {
+      const res = await fetch(`${API_URL}/events/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -268,7 +271,7 @@ const Dashboard = ({ logout }) => {
       if (res.ok) {
         fetchEvents();
         // Also refresh stats
-        const statsRes = await fetch("http://localhost:5000/events/stats", {
+        const statsRes = await fetch(`${API_URL}/events/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (statsRes.ok) {
@@ -295,6 +298,14 @@ const Dashboard = ({ logout }) => {
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Calendar Sync</h1>
             </div>
+            {/* Desktop navigation bar */}
+            <nav className="hidden sm:flex flex-row gap-4 items-center">
+              <button onClick={() => navigate('/dashboard')} className="text-gray-700 hover:text-blue-600 font-medium px-3 py-2 rounded transition">Dashboard</button>
+              <button onClick={() => navigate('/calendar')} className="text-gray-700 hover:text-blue-600 font-medium px-3 py-2 rounded transition">Calendar</button>
+              <button onClick={() => navigate('/profile')} className="text-gray-700 hover:text-blue-600 font-medium px-3 py-2 rounded transition">Profile</button>
+              <button onClick={() => navigate('/change-password')} className="text-gray-700 hover:text-blue-600 font-medium px-3 py-2 rounded transition">Change Password</button>
+              <button onClick={handleLogout} className="text-red-600 hover:text-red-800 font-medium px-3 py-2 rounded transition">Logout</button>
+            </nav>
             {/* Hamburger for mobile, far right */}
             <div className="sm:hidden flex items-center">
               <button

@@ -14,6 +14,9 @@ import {
 import { Link } from "react-router-dom";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Calendar = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -60,7 +63,7 @@ const Calendar = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('session_token');
-      const response = await fetch('http://localhost:5000/events', {
+      const response = await fetch(`${API_URL}/events`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

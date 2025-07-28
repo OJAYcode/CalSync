@@ -4,6 +4,9 @@ import { User, Mail, Lock, Users, Shield, Key } from "lucide-react";
 
 const ADMIN_CODE = "ADMIN2024"; // Change this to your secure admin code
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Signup = ({ setUser }) => {
   const [activeTab, setActiveTab] = useState("employee");
   const [departments, setDepartments] = useState([]);
@@ -32,7 +35,7 @@ const Signup = ({ setUser }) => {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:5000/departments")
+    fetch(`${API_URL}/departments`)
       .then(res => res.json())
       .then(data => setDepartments(data))
       .catch(() => setDepartments([]));
@@ -76,7 +79,7 @@ const Signup = ({ setUser }) => {
         department: empForm.departments.join(", "),
         role: "employee"
       };
-      const res = await fetch("http://localhost:5000/auth/signup", {
+      const res = await fetch(`${API_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -115,7 +118,7 @@ const Signup = ({ setUser }) => {
         role: "admin"
       };
       delete payload.admin_code;
-      const res = await fetch("http://localhost:5000/auth/signup", {
+      const res = await fetch(`${API_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

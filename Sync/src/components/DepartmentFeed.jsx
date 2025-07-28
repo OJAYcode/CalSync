@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const DepartmentFeed = () => {
   const [events, setEvents] = useState([]);
   const [user, setUser] = useState(null);
@@ -14,7 +17,7 @@ const DepartmentFeed = () => {
       setUser(JSON.parse(storedUser));
     }
     // Fetch all events
-    fetch("http://localhost:5000/events", {
+    fetch(`${API_URL}/events`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("session_token")}` },
     })
       .then(res => res.json())

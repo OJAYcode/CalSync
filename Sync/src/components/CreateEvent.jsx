@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 console.log("CreateEvent component rendering");
 
 const CreateEvent = () => {
@@ -179,7 +182,7 @@ const CreateEvent = () => {
       // Make API call to create event
 
       const token = localStorage.getItem('session_token');
-      const response = await fetch('http://localhost:5000/events', {
+      const response = await fetch(`${API_URL}/events`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -208,43 +211,13 @@ const CreateEvent = () => {
           });
         }, 4000);
       } else {
-        throw new Error("Unexpected response status: " + response.status);
+        const errorData = await response.json();
+        console.error("Failed to create event:", errorData);
+        setErrors({ submit: errorData.error || "Failed to create event" });
       }
     } catch (error) {
-      console.error("Failed to create event - Full error:", error);
-      console.error("Error response:", error.response);
-
-      // Handle different types of errors
-      if (
-        error.code === "ECONNREFUSED" ||
-        error.message.includes("Network Error")
-      ) {
-        setErrors({
-          submit:
-            "Cannot connect to server. Please make sure the backend is running.",
-        });
-      } else if (error.isAuthError || error.response?.status === 401) {
-        console.log("Authentication error detected, redirecting to login...");
-        // Force logout and redirect
-        localStorage.removeItem("session_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("user");
-        navigate("/login");
-        return;
-      } else {
-        let errorMessage = "Failed to create event. Please try again.";
-        if (error.response?.data?.error) {
-          errorMessage = error.response.data.error;
-        } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        } else if (error.message && error.message !== "Authentication failed") {
-          errorMessage = error.message;
-        }
-
-        setErrors({
-          submit: errorMessage,
-        });
-      }
+      console.error("Network error:", error);
+      setErrors({ submit: "Network error. Please try again." });
     } finally {
       setLoading(false);
     }

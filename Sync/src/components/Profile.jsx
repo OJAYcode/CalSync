@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Profile = () => {
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", department: "" });
   const [departments, setDepartments] = useState([]);
@@ -12,7 +15,7 @@ const Profile = () => {
   useEffect(() => {
     // Fetch user info
     const token = localStorage.getItem("session_token");
-    fetch("http://localhost:5000/users/me", {
+    fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => res.json())
@@ -28,7 +31,7 @@ const Profile = () => {
       })
       .catch(() => { setError("Failed to load profile"); setLoading(false); });
     // Fetch departments
-    fetch("http://localhost:5000/departments")
+    fetch(`${API_URL}/departments`)
       .then(res => res.json())
       .then(data => setDepartments(data))
       .catch(() => setDepartments([]));
@@ -43,22 +46,31 @@ const Profile = () => {
     setError("");
     setSuccess("");
     setSaving(true);
-    const token = localStorage.getItem("session_token");
-    const res = await fetch("http://localhost:5000/users/me", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(form)
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setSuccess("Profile updated successfully!");
-      // Optionally update localStorage user
-      const user = JSON.parse(localStorage.getItem("user") || "{}") || {};
-      localStorage.setItem("user", JSON.stringify({ ...user, ...form }));
-    } else {
-      setError(data.error || "Failed to update profile");
+    try {
+      const token = localStorage.getItem("session_token");
+      const res = await fetch(`${API_URL}/users/me`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Profile updated successfully!");
+        // Update stored user data
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        const updatedUser = { ...storedUser, ...form };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+      } else {
+        setError(data.error || "Failed to update profile");
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;

@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BackButton from "./BackButton";
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const AdminDashboard = () => {
   const [user, setUser] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -30,7 +33,7 @@ const AdminDashboard = () => {
 
   const fetchDepartments = async () => {
     try {
-      const res = await fetch("http://localhost:5000/departments");
+      const res = await fetch(`${API_URL}/departments`);
       const data = await res.json();
       setDepartments(data);
     } catch (err) {
@@ -40,7 +43,7 @@ const AdminDashboard = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("http://localhost:5000/users", {
+      const res = await fetch(`${API_URL}/users`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("session_token")}` },
       });
       const data = await res.json();
@@ -68,7 +71,7 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await fetch("http://localhost:5000/departments", {
+      const res = await fetch(`${API_URL}/departments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -93,7 +96,7 @@ const AdminDashboard = () => {
     setError("");
     setSuccess("");
     try {
-      const res = await fetch(`http://localhost:5000/departments/${id}`, {
+      const res = await fetch(`${API_URL}/departments/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("session_token")}`,

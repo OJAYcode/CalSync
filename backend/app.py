@@ -16,8 +16,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
 
-# Enable CORS for all routes (development only)
-CORS(app)
+# Enable CORS for specific origins
+CORS(app, origins=[
+    "http://localhost:3000",  # Local development
+    "https://*.vercel.app",   # Vercel domains
+    "https://*.railway.app"   # Railway domains (for testing)
+])
 
 # Simple session storage (in production, use proper session management)
 active_sessions = {}

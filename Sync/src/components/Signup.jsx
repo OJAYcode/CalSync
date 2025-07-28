@@ -7,6 +7,10 @@ const ADMIN_CODE = "ADMIN2024"; // Change this to your secure admin code
 // API URL configuration
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
+// Debug logging
+console.log("API_URL:", API_URL);
+console.log("process.env.REACT_APP_API_URL:", process.env.REACT_APP_API_URL);
+
 const Signup = ({ setUser }) => {
   const [activeTab, setActiveTab] = useState("employee");
   const [departments, setDepartments] = useState([]);
@@ -35,10 +39,20 @@ const Signup = ({ setUser }) => {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   useEffect(() => {
+    console.log("Fetching departments from:", `${API_URL}/departments`);
     fetch(`${API_URL}/departments`)
-      .then(res => res.json())
-      .then(data => setDepartments(data))
-      .catch(() => setDepartments([]));
+      .then(res => {
+        console.log("Departments response status:", res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log("Departments data:", data);
+        setDepartments(data);
+      })
+      .catch(error => {
+        console.error("Error fetching departments:", error);
+        setDepartments([]);
+      });
   }, []);
 
   // Employee form handlers

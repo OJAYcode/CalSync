@@ -4,8 +4,8 @@ import { User, Mail, Lock, Users, Shield, Key } from "lucide-react";
 
 const ADMIN_CODE = "ADMIN2024"; // Change this to your secure admin code
 
-// API URL configuration
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+// API URL configuration - temporarily hardcoded for testing
+const API_URL = "https://calsync-production.up.railway.app";
 
 // Debug logging
 console.log("API_URL:", API_URL);

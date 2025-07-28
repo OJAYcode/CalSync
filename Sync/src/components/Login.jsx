@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Lock, LogIn } from "lucide-react";
 
-// API URL configuration
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+// API URL configuration - temporarily hardcoded for testing
+const API_URL = "https://calsync-production.up.railway.app";
 
 const Login = ({ setUser }) => {
   const [form, setForm] = useState({ email: "", password: "" });

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BackButton from "./BackButton";
 
-// API URL configuration
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+// API URL configuration - using Railway backend
+const API_URL = "https://calsync-production.up.railway.app";
 
 const AdminDashboard = () => {
   const [user, setUser] = useState(null);

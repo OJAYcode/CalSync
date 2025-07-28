@@ -53,6 +53,27 @@ function App() {
             if (currentToken) {
               // Send this token to your backend to send notifications later
               console.log('FCM Token:', currentToken);
+              
+              // Send token to backend if user is logged in
+              if (user) {
+                const token = localStorage.getItem('session_token');
+                fetch('https://calsync-production.up.railway.app/users/fcm-token', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ fcm_token: currentToken })
+                }).then(response => {
+                  if (response.ok) {
+                    console.log('✅ FCM token sent to backend successfully');
+                  } else {
+                    console.log('❌ Failed to send FCM token to backend');
+                  }
+                }).catch(err => {
+                  console.log('❌ Error sending FCM token to backend:', err);
+                });
+              }
             } else {
               console.log('No registration token available. Request permission to generate one.');
             }
@@ -69,7 +90,7 @@ function App() {
         }
       });
     }
-  }, []);
+  }, [user]); // Add user as dependency to re-run when user logs in
 
   // Simple logout function
   const logout = () => {

@@ -34,6 +34,7 @@ class Database:
             last_name TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'employee',
             is_active BOOLEAN DEFAULT 1,
+            fcm_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

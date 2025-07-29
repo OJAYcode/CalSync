@@ -813,3 +813,37 @@ def print_startup_info():
 
 # Call startup info function
 print_startup_info()
+
+# Add a test endpoint for debugging JWT tokens
+@app.route('/test-token', methods=['POST'])
+def test_token():
+    """Test endpoint to debug JWT token issues"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'error': 'No Authorization header'}), 401
+        
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Invalid Authorization header format'}), 401
+        
+        token = auth_header.split(' ')[1]
+        
+        # Try to decode the token
+        try:
+            from flask_jwt_extended import decode_token
+            decoded = decode_token(token)
+            return jsonify({
+                'valid': True,
+                'user_id': decoded['sub'],
+                'expires': decoded['exp'],
+                'issued_at': decoded['iat']
+            }), 200
+        except Exception as jwt_error:
+            return jsonify({
+                'valid': False,
+                'error': str(jwt_error),
+                'token_preview': token[:50] + '...' if len(token) > 50 else token
+            }), 401
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

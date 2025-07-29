@@ -273,9 +273,23 @@ def create_event():
                 return jsonify({'error': 'Invalid user ID format'}), 400
         
         # Get user data
+        print(f"🔍 Looking up user with ID: {user_id} (type: {type(user_id)})")
         user = user_model.get_user_by_id(user_id)
+        print(f"🔍 User lookup result: {user}")
+        
         if not user:
             print("❌ User not found")
+            # Let's check what users exist in the database
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT id, email, first_name, last_name FROM users LIMIT 5')
+                users = cursor.fetchall()
+                conn.close()
+                print(f"🔍 Available users in database: {users}")
+            except Exception as db_error:
+                print(f"❌ Error checking database: {db_error}")
+            
             return jsonify({'error': 'User not found'}), 404
         
         print(f"✅ User found: {user.get('email', 'Unknown')}")

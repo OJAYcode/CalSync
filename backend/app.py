@@ -389,13 +389,28 @@ def get_all_users():
 def list_departments():
     """List all departments"""
     try:
+        print(f"🔍 Attempting to connect to database at: {db.db_path}")
         conn = db.get_connection()
         cursor = conn.cursor()
+        
+        # Check if departments table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='departments'")
+        table_exists = cursor.fetchone()
+        print(f"📋 Departments table exists: {table_exists is not None}")
+        
+        if not table_exists:
+            print("❌ Departments table does not exist, initializing database...")
+            db.init_database()
+            conn = db.get_connection()
+            cursor = conn.cursor()
+        
         cursor.execute('SELECT id, name FROM departments ORDER BY name ASC')
         departments = [dict(row) for row in cursor.fetchall()]
+        print(f"📊 Found {len(departments)} departments: {departments}")
         conn.close()
         return jsonify(departments), 200
     except Exception as e:
+        print(f"❌ Error in list_departments: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/departments', methods=['POST'])
@@ -505,11 +520,29 @@ def delete_department_feed(feed_id):
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'database': 'sqlite',
-        'message': 'Calendar App API is running'
-    }), 200
+    try:
+        # Test database connection
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM departments')
+        dept_count = cursor.fetchone()[0]
+        conn.close()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'sqlite',
+            'database_path': db.db_path,
+            'departments_count': dept_count,
+            'message': 'Calendar App API is running'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'sqlite',
+            'database_path': db.db_path,
+            'error': str(e),
+            'message': 'Database connection failed'
+        }), 500
 
 @app.route('/notifications', methods=['GET'])
 @jwt_required()

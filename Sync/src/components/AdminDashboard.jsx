@@ -9,7 +9,9 @@ const AdminDashboard = () => {
   const [user, setUser] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [users, setUsers] = useState([]);
+  const [departmentFeeds, setDepartmentFeeds] = useState([]);
   const [newDept, setNewDept] = useState("");
+  const [newFeed, setNewFeed] = useState({ title: "", content: "", department: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [stats, setStats] = useState({ total: 0, admins: 0, employees: 0, active: 0 });
@@ -28,6 +30,7 @@ const AdminDashboard = () => {
     }
     fetchDepartments();
     fetchUsers();
+    fetchDepartmentFeeds();
     // eslint-disable-next-line
   }, []);
 
@@ -59,6 +62,16 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       setUsers([]);
+    }
+  };
+
+  const fetchDepartmentFeeds = async () => {
+    try {
+      const res = await fetch(`${API_URL}/department-feeds`);
+      const data = await res.json();
+      setDepartmentFeeds(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setDepartmentFeeds([]);
     }
   };
 
@@ -114,12 +127,145 @@ const AdminDashboard = () => {
     }
   };
 
-  // Placeholder for promote/demote/deactivate actions
-  // You would implement backend endpoints for these actions
-  const handlePromote = (userId) => alert(`Promote user ${userId} to admin (backend endpoint needed)`);
-  const handleDemote = (userId) => alert(`Demote user ${userId} to employee (backend endpoint needed)`);
-  const handleDeactivate = (userId) => alert(`Deactivate user ${userId} (backend endpoint needed)`);
-  const handleReactivate = (userId) => alert(`Reactivate user ${userId} (backend endpoint needed)`);
+  const handleAddFeed = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    if (!newFeed.title.trim() || !newFeed.content.trim() || !newFeed.department.trim()) {
+      setError("Title, content, and department are required");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/department-feeds`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+        body: JSON.stringify(newFeed),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Department feed added");
+        setNewFeed({ title: "", content: "", department: "" });
+        fetchDepartmentFeeds();
+      } else {
+        setError(data.error || "Failed to add department feed");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleDeleteFeed = async (id) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`${API_URL}/department-feeds/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("Department feed deleted");
+        fetchDepartmentFeeds();
+      } else {
+        setError(data.error || "Failed to delete department feed");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handlePromote = async (userId) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`${API_URL}/users/${userId}/promote`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("User promoted to admin");
+        fetchUsers();
+      } else {
+        setError(data.error || "Failed to promote user");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleDemote = async (userId) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`${API_URL}/users/${userId}/demote`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("User demoted to employee");
+        fetchUsers();
+      } else {
+        setError(data.error || "Failed to demote user");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleDeactivate = async (userId) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`${API_URL}/users/${userId}/deactivate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("User deactivated");
+        fetchUsers();
+      } else {
+        setError(data.error || "Failed to deactivate user");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleReactivate = async (userId) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`${API_URL}/users/${userId}/reactivate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("session_token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess("User reactivated");
+        fetchUsers();
+      } else {
+        setError(data.error || "Failed to reactivate user");
+      }
+    } catch (err) {
+      setError("Network error");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -140,6 +286,11 @@ const AdminDashboard = () => {
       </header>
       <main className="max-w-6xl mx-auto py-8 px-4">
         <div className="mb-4"><BackButton /></div>
+        
+        {/* Error and Success Messages */}
+        {error && <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">{error}</div>}
+        {success && <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">{success}</div>}
+        
         {/* System Stats */}
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">System Stats</h2>
@@ -162,6 +313,7 @@ const AdminDashboard = () => {
             </div>
           </div>
         </section>
+
         {/* User Management */}
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">User Management</h2>
@@ -203,6 +355,7 @@ const AdminDashboard = () => {
             </table>
           </div>
         </section>
+
         {/* Department Management */}
         <section className="mb-10">
           <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">Department Management</h2>
@@ -221,8 +374,6 @@ const AdminDashboard = () => {
               Add
             </button>
           </form>
-          {error && <div className="text-red-600 mb-2 dark:text-red-400">{error}</div>}
-          {success && <div className="text-green-600 mb-2 dark:text-green-400">{success}</div>}
           <ul className="bg-white dark:bg-gray-800 rounded shadow divide-y dark:divide-gray-700">
             {departments.map((dept) => (
               <li key={dept.id} className="flex justify-between items-center px-4 py-2 dark:text-gray-100">
@@ -239,6 +390,75 @@ const AdminDashboard = () => {
               <li className="px-4 py-2 text-gray-500 dark:text-gray-400">No departments found.</li>
             )}
           </ul>
+        </section>
+
+        {/* Department Feed Management */}
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-4 dark:text-gray-100">Department Feed Management</h2>
+          <form onSubmit={handleAddFeed} className="mb-4 space-y-4">
+            <div className="flex gap-4">
+              <input
+                type="text"
+                value={newFeed.title}
+                onChange={(e) => setNewFeed({...newFeed, title: e.target.value})}
+                placeholder="Feed title"
+                className="border px-3 py-2 rounded flex-1 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+              />
+              <select
+                value={newFeed.department}
+                onChange={(e) => setNewFeed({...newFeed, department: e.target.value})}
+                className="border px-3 py-2 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+              >
+                <option value="">Select Department</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.name}>{dept.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-4">
+              <textarea
+                value={newFeed.content}
+                onChange={(e) => setNewFeed({...newFeed, content: e.target.value})}
+                placeholder="Feed content"
+                rows="3"
+                className="border px-3 py-2 rounded flex-1 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+              />
+              <button
+                type="submit"
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 self-end"
+              >
+                Add Feed
+              </button>
+            </div>
+          </form>
+          
+          <div className="space-y-4">
+            {departmentFeeds.map((feed) => (
+              <div key={feed.id} className="bg-white dark:bg-gray-800 rounded shadow p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-semibold dark:text-gray-100">{feed.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{feed.department}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteFeed(feed.id)}
+                    className="text-red-500 hover:underline dark:text-red-400"
+                  >
+                    Delete
+                  </button>
+                </div>
+                <p className="text-gray-700 dark:text-gray-300">{feed.content}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Created: {new Date(feed.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+            {departmentFeeds.length === 0 && (
+              <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                No department feeds found.
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>

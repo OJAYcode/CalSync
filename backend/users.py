@@ -217,5 +217,117 @@ class User:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def promote_user(self, user_id):
+        """Promote user to admin"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Check if user exists and is not already admin
+            cursor.execute('SELECT role FROM users WHERE id = ?', (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return {"success": False, "error": "User not found"}
+            
+            if user['role'] == 'admin':
+                conn.close()
+                return {"success": False, "error": "User is already an admin"}
+            
+            # Promote to admin
+            cursor.execute('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ('admin', user_id))
+            conn.commit()
+            conn.close()
+            
+            return {"success": True, "message": "User promoted to admin successfully"}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def demote_user(self, user_id):
+        """Demote admin to employee"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Check if user exists and is admin
+            cursor.execute('SELECT role FROM users WHERE id = ?', (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return {"success": False, "error": "User not found"}
+            
+            if user['role'] != 'admin':
+                conn.close()
+                return {"success": False, "error": "User is not an admin"}
+            
+            # Demote to employee
+            cursor.execute('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ('employee', user_id))
+            conn.commit()
+            conn.close()
+            
+            return {"success": True, "message": "User demoted to employee successfully"}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def deactivate_user(self, user_id):
+        """Deactivate user account"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Check if user exists and is active
+            cursor.execute('SELECT is_active FROM users WHERE id = ?', (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return {"success": False, "error": "User not found"}
+            
+            if not user['is_active']:
+                conn.close()
+                return {"success": False, "error": "User is already deactivated"}
+            
+            # Deactivate user
+            cursor.execute('UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (False, user_id))
+            conn.commit()
+            conn.close()
+            
+            return {"success": True, "message": "User deactivated successfully"}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def reactivate_user(self, user_id):
+        """Reactivate user account"""
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            # Check if user exists and is inactive
+            cursor.execute('SELECT is_active FROM users WHERE id = ?', (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return {"success": False, "error": "User not found"}
+            
+            if user['is_active']:
+                conn.close()
+                return {"success": False, "error": "User is already active"}
+            
+            # Reactivate user
+            cursor.execute('UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (True, user_id))
+            conn.commit()
+            conn.close()
+            
+            return {"success": True, "message": "User reactivated successfully"}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 # Global user model instance
 user_model = User()

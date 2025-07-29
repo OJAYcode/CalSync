@@ -499,6 +499,99 @@ def get_all_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# User Management Endpoints
+@app.route('/users/<int:user_id>/promote', methods=['POST'])
+@jwt_required()
+def promote_user(user_id):
+    """Promote user to admin (admin only)"""
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = user_model.get_user_by_id(current_user_id)
+        
+        if not current_user or current_user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Prevent self-promotion
+        if int(current_user_id) == user_id:
+            return jsonify({'error': 'Cannot promote yourself'}), 400
+        
+        result = user_model.promote_user(user_id)
+        if result['success']:
+            return jsonify({'message': 'User promoted to admin successfully'}), 200
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:user_id>/demote', methods=['POST'])
+@jwt_required()
+def demote_user(user_id):
+    """Demote admin to employee (admin only)"""
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = user_model.get_user_by_id(current_user_id)
+        
+        if not current_user or current_user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Prevent self-demotion
+        if int(current_user_id) == user_id:
+            return jsonify({'error': 'Cannot demote yourself'}), 400
+        
+        result = user_model.demote_user(user_id)
+        if result['success']:
+            return jsonify({'message': 'User demoted to employee successfully'}), 200
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:user_id>/deactivate', methods=['POST'])
+@jwt_required()
+def deactivate_user(user_id):
+    """Deactivate user (admin only)"""
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = user_model.get_user_by_id(current_user_id)
+        
+        if not current_user or current_user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Prevent self-deactivation
+        if int(current_user_id) == user_id:
+            return jsonify({'error': 'Cannot deactivate yourself'}), 400
+        
+        result = user_model.deactivate_user(user_id)
+        if result['success']:
+            return jsonify({'message': 'User deactivated successfully'}), 200
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:user_id>/reactivate', methods=['POST'])
+@jwt_required()
+def reactivate_user(user_id):
+    """Reactivate user (admin only)"""
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = user_model.get_user_by_id(current_user_id)
+        
+        if not current_user or current_user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        result = user_model.reactivate_user(user_id)
+        if result['success']:
+            return jsonify({'message': 'User reactivated successfully'}), 200
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Department Management Endpoints
 @app.route('/departments', methods=['GET'])
 def list_departments():

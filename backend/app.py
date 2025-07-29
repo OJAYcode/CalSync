@@ -354,20 +354,28 @@ def get_event_stats():
 @jwt_required()
 def delete_event(event_id):
     """Delete an event by ID (admin or event creator)"""
-    user_id = get_jwt_identity()
-    
-    # Convert user_id to int if it's a string (for database lookup)
-    if isinstance(user_id, str):
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            return jsonify({'error': 'Invalid user ID format'}), 400
-    
-    user = user_model.get_user_by_id(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
     try:
+        print(f"🔍 Starting delete event for ID: {event_id}")
+        
+        user_id = get_jwt_identity()
+        print(f"👤 User ID from JWT: {user_id}")
+        
+        # Convert user_id to int if it's a string (for database lookup)
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+                print(f"✅ Converted user_id to int: {user_id}")
+            except ValueError:
+                print(f"❌ Failed to convert user_id to int: {user_id}")
+                return jsonify({'error': 'Invalid user ID format'}), 400
+        
+        user = user_model.get_user_by_id(user_id)
+        if not user:
+            print(f"❌ User not found for ID: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        print(f"✅ User found: {user.get('email', 'Unknown')}, Role: {user.get('role', 'Unknown')}")
+        
         # Check if user is admin or the event creator
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -376,19 +384,31 @@ def delete_event(event_id):
         conn.close()
         
         if not event:
+            print(f"❌ Event not found for ID: {event_id}")
             return jsonify({'error': 'Event not found'}), 404
+        
+        print(f"✅ Event found, created by: {event['created_by']}")
+        print(f"🔍 User ID: {user['id']}, Event creator: {event['created_by']}, User role: {user.get('role')}")
         
         # Allow admin or event creator to delete
         if user.get('role') != 'admin' and event['created_by'] != user['id']:
+            print(f"❌ Access denied - User role: {user.get('role')}, Event creator: {event['created_by']}, User ID: {user['id']}")
             return jsonify({'error': 'Access denied. Only admin or event creator can delete events'}), 403
+        
+        print("✅ User has permission to delete event")
         
         success = event_model.delete_event(event_id)
         if success:
+            print("✅ Event deleted successfully")
             return jsonify({'message': 'Event deleted successfully'}), 200
         else:
+            print("❌ Failed to delete event in model")
             return jsonify({'error': 'Failed to delete event'}), 500
+            
     except Exception as e:
         print(f"❌ Error in delete_event: {str(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Failed to delete event'}), 500
 
 # User Routes

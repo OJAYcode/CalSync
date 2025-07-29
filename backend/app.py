@@ -133,7 +133,8 @@ def send_due_notifications():
         now = datetime.now()
         
         # Get all due notifications with user info
-        cursor = db.get_connection().cursor()
+        conn = db.get_connection()
+        cursor = conn.cursor()
         cursor.execute('''
             SELECT n.id, n.event_id, n.user_id, n.notify_at, e.title, e.start_datetime, e.description,
                    u.email, u.first_name, u.last_name, u.fcm_token
@@ -177,7 +178,9 @@ def send_due_notifications():
             
             # Mark notification as sent
             cursor.execute('UPDATE notifications SET sent = 1 WHERE id = ?', (notification_id,))
-            db.get_connection().commit()
+            conn.commit()
+        
+        conn.close()
             
     except Exception as e:
         print(f"❌ Error in send_due_notifications: {e}")

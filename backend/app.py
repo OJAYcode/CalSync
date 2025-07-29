@@ -1,36 +1,44 @@
 #!/usr/bin/env python3
 """
-Flask Calendar App with SQLite
-Simple signup system: users can register as employee or admin
+CalSync Backend API
+Calendar synchronization application backend
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from users import user_model
-from events import event_model
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import secrets
-from database import db
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
+import os
+from dotenv import load_dotenv
+
+# Import models and database
+import database as db
+from users import User
+from events import Event
 from firebase_service import send_event_reminder_notification
-from email_service import send_event_reminder_email, send_welcome_email
+from email_service import send_event_reminder_email
+
+# Load environment variables
+load_dotenv('config.env')
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(32)
+
+# JWT Configuration
+app.config['JWT_SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key_here_change_this_in_production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)  # Tokens expire in 7 days
+jwt = JWTManager(app)
 
 # Enable CORS for all origins (for production deployment)
 CORS(app, origins="*")
 
-# Simple session storage (in production, use proper session management)
-active_sessions = {}
+# Initialize database
+db.init_database()
 
-def generate_session_token():
-    """Generate simple session token"""
-    return secrets.token_hex(32)
-
-def verify_session(token):
-    """Verify session token and return user data"""
-    return active_sessions.get(token)
+# Create model instances
+user_model = User()
+event_model = Event()
 
 def create_notifications_for_event(event_id, start_datetime, reminders):
     """Create notification records for all users for each reminder time (in minutes)"""
@@ -132,32 +140,16 @@ def signup():
     """User signup endpoint"""
     try:
         data = request.get_json()
-        
-        # Validate required fields
-        required_fields = ['email', 'password', 'first_name', 'last_name']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Get role (default to employee)
-        role = data.get('role', 'employee')
-        if role not in ['employee', 'admin']:
-            role = 'employee'
-        
-        # Create user
         result = user_model.create_user(
             email=data['email'],
             password=data['password'],
             first_name=data['first_name'],
             last_name=data['last_name'],
-            role=role
+            role=data.get('role', 'employee')
         )
         
         if result['success']:
-            return jsonify({
-                'message': f'{role.title()} account created successfully',
-                'user_id': result['user_id']
-            }), 201
+            return jsonify({'message': 'User created successfully'}), 201
         else:
             return jsonify({'error': result['error']}), 400
             
@@ -169,24 +161,15 @@ def login():
     """User login endpoint"""
     try:
         data = request.get_json()
-        
-        email = data.get('email')
-        password = data.get('password')
-        
-        if not email or not password:
-            return jsonify({'error': 'Email and password required'}), 400
-        
-        # Authenticate user
-        result = user_model.login_user(email, password)
+        result = user_model.login_user(data['email'], data['password'])
         
         if result['success']:
-            # Create session
-            token = generate_session_token()
-            active_sessions[token] = result['user']
+            # Create JWT token
+            access_token = create_access_token(identity=result['user']['id'])
             
             return jsonify({
                 'message': 'Login successful',
-                'token': token,
+                'token': access_token,
                 'user': result['user']
             }), 200
         else:
@@ -199,10 +182,8 @@ def login():
 def logout():
     """User logout endpoint"""
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        if token in active_sessions:
-            del active_sessions[token]
-        
+        # With JWT, we don't need to store sessions server-side
+        # The client just needs to remove the token
         return jsonify({'message': 'Logged out successfully'}), 200
         
     except Exception as e:
@@ -220,28 +201,35 @@ def get_events():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/events', methods=['POST'])
+@jwt_required()
 def create_event():
     """Create a new event - requires authentication"""
     try:
-        # Check authentication
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
+        # Get user ID from JWT token
+        user_id = get_jwt_identity()
+        
+        # Get user data
+        user = user_model.get_user_by_id(user_id)
         if not user:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify({'error': 'User not found'}), 404
+        
         data = request.get_json()
+        
         # Validate required fields
         required_fields = ['title', 'start_datetime', 'end_datetime']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'error': f'Missing required field: {field}'}), 400
+        
         # Create event
         result = event_model.create_event(
             title=data['title'],
             description=data.get('description', ''),
             start_datetime=data['start_datetime'],
             end_datetime=data['end_datetime'],
-            created_by=user['id']
+            created_by=user_id
         )
+        
         if result['success']:
             # Handle reminders/notifications
             reminders = data.get('reminders', [15])  # Default: 15 min before
@@ -249,6 +237,7 @@ def create_event():
             return jsonify(result), 201
         else:
             return jsonify({'error': result['error']}), 400
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -281,10 +270,11 @@ def get_event_stats():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/events/<int:event_id>', methods=['DELETE'])
+@jwt_required()
 def delete_event(event_id):
     """Delete an event by ID (admin only)"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user or user.get('role') != 'admin':
         return jsonify({'error': 'Admin access required'}), 403
     try:
@@ -298,14 +288,15 @@ def delete_event(event_id):
 
 # User Routes
 @app.route('/users/me', methods=['GET'])
+@jwt_required()
 def get_current_user():
     """Get current user information"""
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
         
         if not user:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify({'error': 'User not found'}), 404
         
         return jsonify(user), 200
         
@@ -313,13 +304,14 @@ def get_current_user():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/users/me', methods=['PUT'])
+@jwt_required()
 def update_current_user():
     """Update current user information"""
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
         if not user:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify({'error': 'User not found'}), 404
         data = request.get_json()
         # Only allow updating certain fields
         allowed_fields = ['first_name', 'last_name', 'department', 'email']
@@ -328,9 +320,8 @@ def update_current_user():
             return jsonify({'error': 'No valid fields to update'}), 400
         result = user_model.update_user(user['id'], update_data)
         if result['success']:
-            # Update session
-            user.update(update_data)
-            active_sessions[token] = user
+            # Update session (JWT token is not session, so no direct session update here)
+            # The user object returned by get_user_by_id is the current state
             return jsonify({'message': 'Profile updated successfully'}), 200
         else:
             return jsonify({'error': result['error']}), 400
@@ -338,13 +329,14 @@ def update_current_user():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/auth/change-password', methods=['POST'])
+@jwt_required()
 def change_password():
     """Change user password"""
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
         if not user:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify({'error': 'User not found'}), 404
         data = request.get_json()
         old_password = data.get('old_password')
         new_password = data.get('new_password')
@@ -359,14 +351,15 @@ def change_password():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/users', methods=['GET'])
+@jwt_required()
 def get_all_users():
     """Get all users (admin only)"""
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
         
         if not user:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify({'error': 'User not found'}), 404
         
         if user['role'] != 'admin':
             return jsonify({'error': 'Admin access required'}), 403
@@ -392,10 +385,11 @@ def list_departments():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/departments', methods=['POST'])
+@jwt_required()
 def add_department():
     """Add a new department (admin only)"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user or user.get('role') != 'admin':
         return jsonify({'error': 'Admin access required'}), 403
     data = request.get_json()
@@ -413,10 +407,11 @@ def add_department():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/departments/<int:dept_id>', methods=['DELETE'])
+@jwt_required()
 def delete_department(dept_id):
     """Delete a department (admin only)"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user or user.get('role') != 'admin':
         return jsonify({'error': 'Admin access required'}), 403
     try:
@@ -448,19 +443,20 @@ def list_department_feeds():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/department-feeds', methods=['POST'])
+@jwt_required()
 def create_department_feed():
     """Create a new department feed (admin only)"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+    data = request.get_json()
+    title = data.get('title')
+    content = data.get('content')
+    department = data.get('department')
+    if not title or not content or not department:
+        return jsonify({'error': 'Title, content, and department are required'}), 400
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-        data = request.get_json()
-        title = data.get('title')
-        content = data.get('content')
-        department = data.get('department')
-        if not title or not content or not department:
-            return jsonify({'error': 'Title, content, and department are required'}), 400
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -474,13 +470,14 @@ def create_department_feed():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/department-feeds/<int:feed_id>', methods=['DELETE'])
+@jwt_required()
 def delete_department_feed(feed_id):
     """Delete a department feed (admin only)"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
     try:
-        token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        user = verify_session(token)
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute('DELETE FROM department_feeds WHERE id = ?', (feed_id,))
@@ -501,12 +498,13 @@ def health_check():
     }), 200
 
 @app.route('/notifications', methods=['GET'])
+@jwt_required()
 def get_notifications():
     """Get pending notifications for the logged-in user (sent=1, read=0)"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'Authentication required'}), 401
+        return jsonify({'error': 'User not found'}), 404
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -524,12 +522,13 @@ def get_notifications():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/notifications/<int:notif_id>/read', methods=['POST'])
+@jwt_required()
 def mark_notification_read(notif_id):
     """Mark a notification as read"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'Authentication required'}), 401
+        return jsonify({'error': 'User not found'}), 404
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
@@ -543,12 +542,13 @@ def mark_notification_read(notif_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/users/fcm-token', methods=['POST'])
+@jwt_required()
 def update_fcm_token():
     """Update user's FCM token for push notifications"""
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    user = verify_session(token)
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'Authentication required'}), 401
+        return jsonify({'error': 'User not found'}), 404
     
     try:
         data = request.get_json()
@@ -565,9 +565,8 @@ def update_fcm_token():
         conn.commit()
         conn.close()
         
-        # Update session
-        user['fcm_token'] = fcm_token
-        active_sessions[token] = user
+        # Update session (JWT token is not session, so no direct session update here)
+        # The user object returned by get_user_by_id is the current state
         
         return jsonify({'message': 'FCM token updated successfully'}), 200
     except Exception as e:

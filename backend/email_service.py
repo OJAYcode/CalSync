@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Email Service using SendGrid
+Email Service using Gmail SMTP
 Handles email notifications for the calendar app
 """
 
 import os
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
 def send_email_notification(to_email, subject, content, html_content=None):
     """
-    Send an email notification using SendGrid
+    Send an email notification using Gmail SMTP
     
     Args:
         to_email (str): Recipient email address
@@ -23,36 +24,36 @@ def send_email_notification(to_email, subject, content, html_content=None):
         bool: True if successful, False otherwise
     """
     try:
-        # Get SendGrid API key from environment
-        api_key = os.getenv('SENDGRID_API_KEY')
-        from_email = os.getenv('FROM_EMAIL', 'noreply@calsync.com')
+        # Get Gmail credentials from environment
+        gmail_user = os.getenv('GMAIL_USER')
+        gmail_password = os.getenv('GMAIL_APP_PASSWORD')
         
-        if not api_key:
-            print("❌ SendGrid API key not configured")
+        if not gmail_user or not gmail_password:
+            print("❌ Gmail credentials not configured")
             return False
         
-        # Create the email
-        from_email_obj = Email(from_email)
-        to_email_obj = To(to_email)
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = gmail_user
+        msg['To'] = to_email
+        
+        # Add plain text and HTML parts
+        text_part = MIMEText(content, 'plain')
+        msg.attach(text_part)
         
         if html_content:
-            content_obj = Content("text/html", html_content)
-        else:
-            content_obj = Content("text/plain", content)
+            html_part = MIMEText(html_content, 'html')
+            msg.attach(html_part)
         
-        mail = Mail(from_email_obj, to_email_obj, subject, content_obj)
+        # Send email
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(gmail_user, gmail_password)
+            server.send_message(msg)
         
-        # Send the email
-        sg = SendGridAPIClient(api_key=api_key)
-        response = sg.send(mail)
+        print(f"✅ Email sent successfully to {to_email}")
+        return True
         
-        if response.status_code in [200, 201, 202]:
-            print(f"✅ Email sent successfully to {to_email}")
-            return True
-        else:
-            print(f"❌ Email failed to send: {response.status_code}")
-            return False
-            
     except Exception as e:
         print(f"❌ Error sending email: {e}")
         return False

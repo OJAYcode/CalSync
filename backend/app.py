@@ -64,13 +64,12 @@ except Exception as e:
     print(f"Could not add 'read' column to notifications: {e}")
 
 def send_due_notifications():
-    """Send due notifications via push, email, and mark as sent"""
+    """Send notifications for events that are due"""
     try:
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now()
         
-        # Get due notifications with user and event details
+        # Get all due notifications with user info
+        cursor = db.get_connection().cursor()
         cursor.execute('''
             SELECT n.id, n.event_id, n.user_id, n.notify_at, e.title, e.start_datetime, e.description,
                    u.email, u.first_name, u.last_name, u.fcm_token
@@ -79,50 +78,45 @@ def send_due_notifications():
             JOIN users u ON n.user_id = u.id
             WHERE n.sent = 0 AND n.notify_at <= ?
         ''', (now,))
-        due = cursor.fetchall()
         
-        for notif in due:
-            print(f"[NOTIFICATION] Processing notification for User {notif['user_id']} - Event '{notif['title']}'")
+        notifications = cursor.fetchall()
+        
+        for notification in notifications:
+            notification_id, event_id, user_id, notify_at, title, start_datetime, description, email, first_name, last_name, fcm_token = notification
             
-            # Format event time for display
-            event_time = datetime.fromisoformat(notif['start_datetime']).strftime('%B %d, %Y at %I:%M %p')
+            # Format event time
+            event_time = start_datetime.strftime("%B %d, %Y at %I:%M %p")
+            user_name = f"{first_name} {last_name}".strip()
             
-            # Send push notification if FCM token exists
-            if notif['fcm_token']:
+            # PRIORITY 1: Send Push Notification (Primary)
+            success = False
+            if fcm_token:
                 try:
-                    result = send_event_reminder_notification(
-                        [notif['fcm_token']], 
-                        notif['title'], 
-                        event_time, 
-                        notif['event_id']
-                    )
-                    print(f"   Push notification result: {result}")
+                    success = send_event_reminder_notification([fcm_token], title, event_time, event_id)
+                    if success:
+                        print(f"✅ Push notification sent to {user_name} for event: {title}")
+                    else:
+                        print(f"❌ Failed to send push notification to {user_name}")
                 except Exception as e:
-                    print(f"   Push notification failed: {e}")
+                    print(f"❌ Error sending push notification to {user_name}: {e}")
             
-            # Send email notification
-            try:
-                user_name = f"{notif['first_name']} {notif['last_name']}"
-                email_sent = send_event_reminder_email(
-                    notif['email'],
-                    user_name,
-                    notif['title'],
-                    event_time,
-                    notif['description'] or ""
-                )
-                print(f"   Email notification: {'✅ Sent' if email_sent else '❌ Failed'}")
-            except Exception as e:
-                print(f"   Email notification failed: {e}")
+            # PRIORITY 2: Send Email Notification (Fallback only if push fails or no FCM token)
+            if not fcm_token or not success:
+                try:
+                    email_success = send_event_reminder_email(email, user_name, title, event_time, description)
+                    if email_success:
+                        print(f"✅ Email notification sent to {user_name} for event: {title}")
+                    else:
+                        print(f"❌ Failed to send email notification to {user_name}")
+                except Exception as e:
+                    print(f"❌ Error sending email notification to {user_name}: {e}")
             
             # Mark notification as sent
-            cursor.execute('UPDATE notifications SET sent = 1 WHERE id = ?', (notif['id'],))
-        
-        conn.commit()
-        conn.close()
-        print(f"✅ Processed {len(due)} notifications")
-        
+            cursor.execute('UPDATE notifications SET sent = 1 WHERE id = ?', (notification_id,))
+            db.get_connection().commit()
+            
     except Exception as e:
-        print(f"❌ Error sending notifications: {e}")
+        print(f"❌ Error in send_due_notifications: {e}")
 
 # Start background scheduler
 scheduler = BackgroundScheduler()

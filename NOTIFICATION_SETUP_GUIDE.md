@@ -1,14 +1,14 @@
-# 🔔 Complete Notification System Setup Guide
+# 🔔 Push Notification System Setup Guide
 
-Your CalSync app now has a **complete notification system** with push notifications, email notifications, and in-app notifications! Here's how to set it up:
+Your CalSync app now has a **push notification system** that sends notifications directly to phones! Here's how to set it up:
 
 ## **📱 What's New**
 
-✅ **Push Notifications**: Real-time browser/mobile notifications  
-✅ **Email Notifications**: Beautiful HTML emails via SendGrid  
+✅ **Push Notifications**: Instant phone notifications (Primary)  
+✅ **Email Notifications**: Fallback emails via Gmail SMTP (Optional)  
 ✅ **FCM Token Management**: Automatic token storage and updates  
 ✅ **Enhanced Scheduler**: Processes notifications every minute  
-✅ **Multiple Channels**: Push + Email + In-App notifications  
+✅ **Phone-First Experience**: Notifications work even when app is closed  
 
 ---
 
@@ -30,15 +30,17 @@ Your CalSync app now has a **complete notification system** with push notificati
    FIREBASE_CLIENT_ID=from_json_file
    ```
 
-### **Step 2: SendGrid Configuration (Email Notifications)**
+### **Step 2: Gmail SMTP Configuration (Optional Email Fallback)**
 
-1. **Sign up for SendGrid**: https://sendgrid.com (Free tier: 100 emails/day)
-2. **Go to Settings** → **API Keys**
-3. **Create API Key** (Full Access or Restricted Access with Mail Send)
-4. **Add to Railway Environment Variables**:
+1. **Enable 2-Factor Authentication** on your Gmail account
+2. **Generate App Password**:
+   - Go to Google Account → Security → 2-Step Verification → App passwords
+   - Select "Mail" → "Other (Custom name)" → "CalSync"
+   - Copy the 16-character password
+3. **Add to Railway Environment Variables**:
    ```
-   SENDGRID_API_KEY=your_api_key_here
-   FROM_EMAIL=noreply@calsync.com
+   GMAIL_USER=your_gmail@gmail.com
+   GMAIL_APP_PASSWORD=your_16_character_app_password
    ```
 
 ### **Step 3: Deploy Updated Backend**

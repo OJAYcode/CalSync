@@ -49,6 +49,22 @@ app.config['JWT_SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key_he
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)  # Tokens expire in 7 days
 jwt = JWTManager(app)
 
+# JWT Error handlers
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    print(f"❌ JWT token expired: {jwt_payload}")
+    return jsonify({'error': 'Token has expired'}), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    print(f"❌ Invalid JWT token: {error}")
+    return jsonify({'error': 'Invalid token'}), 401
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    print(f"❌ Missing JWT token: {error}")
+    return jsonify({'error': 'Missing token'}), 401
+
 # Enable CORS for all origins (for production deployment)
 CORS(app, origins="*")
 
@@ -242,21 +258,35 @@ def get_events():
 def create_event():
     """Create a new event - requires authentication"""
     try:
+        print("🔍 Starting event creation...")
+        
         # Get user ID from JWT token
         user_id = get_jwt_identity()
+        print(f"👤 User ID from JWT: {user_id}")
         
         # Get user data
         user = user_model.get_user_by_id(user_id)
         if not user:
+            print("❌ User not found")
             return jsonify({'error': 'User not found'}), 404
         
+        print(f"✅ User found: {user.get('email', 'Unknown')}")
+        
         data = request.get_json()
+        print(f"📝 Request data: {data}")
+        
+        if not data:
+            print("❌ No request data")
+            return jsonify({'error': 'No request data provided'}), 400
         
         # Validate required fields
         required_fields = ['title', 'start_datetime', 'end_datetime']
         for field in required_fields:
             if not data.get(field):
+                print(f"❌ Missing required field: {field}")
                 return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        print("✅ All required fields present")
         
         # Create event
         result = event_model.create_event(
@@ -267,6 +297,8 @@ def create_event():
             created_by=user_id
         )
         
+        print(f"📊 Event creation result: {result}")
+        
         if result['success']:
             # Handle reminders/notifications
             reminders = data.get('reminders', [15])  # Default: 15 min before
@@ -276,6 +308,10 @@ def create_event():
             return jsonify({'error': result['error']}), 400
             
     except Exception as e:
+        print(f"❌ Error in create_event: {str(e)}")
+        print(f"❌ Error type: {type(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/events/<int:event_id>', methods=['GET'])

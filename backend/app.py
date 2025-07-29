@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from database import db
 from users import User
 from events import Event
+from notification_service import notification_service
+from timezone_utils import timezone_utils
 
 # Optional imports for notifications (backend will work without these)
 try:
@@ -192,9 +194,13 @@ def logout():
 # Event Routes
 @app.route('/events', methods=['GET'])
 def get_events():
-    """Get all events"""
+    """Get all events in local timezone"""
     try:
-        events = event_model.get_all_events()
+        # Get timezone from query parameter or detect from IP
+        user_timezone = request.args.get('timezone') or timezone_utils.get_user_timezone(request.remote_addr)
+        print(f"🌍 Requested timezone: {user_timezone}")
+        
+        events = event_model.get_all_events(user_timezone)
         return jsonify(events), 200
         
     except Exception as e:
@@ -256,13 +262,25 @@ def create_event():
         
         print("✅ All required fields present")
         
-        # Create event
+        # Get user's timezone (from request IP or default)
+        user_timezone = data.get('timezone') or timezone_utils.get_user_timezone(request.remote_addr)
+        print(f"🌍 User timezone: {user_timezone}")
+        
+        # Parse and convert datetime strings to UTC for storage
+        start_datetime_utc = timezone_utils.parse_event_datetime(data['start_datetime'], user_timezone)
+        end_datetime_utc = timezone_utils.parse_event_datetime(data['end_datetime'], user_timezone)
+        
+        print(f"🕐 Start datetime (local): {data['start_datetime']} -> UTC: {start_datetime_utc}")
+        print(f"🕐 End datetime (local): {data['end_datetime']} -> UTC: {end_datetime_utc}")
+        
+        # Create event with UTC times
         result = event_model.create_event(
             title=data['title'],
             description=data.get('description', ''),
-            start_datetime=data['start_datetime'],
-            end_datetime=data['end_datetime'],
-            created_by=user_id
+            start_datetime=start_datetime_utc,
+            end_datetime=end_datetime_utc,
+            created_by=user_id,
+            timezone=user_timezone
         )
         
         print(f"📊 Event creation result: {result}")
@@ -647,56 +665,97 @@ def health_check():
             'message': 'Database connection failed'
         }), 500
 
-@app.route('/notifications', methods=['GET'])
-@jwt_required()
-def get_notifications():
-    """Get pending notifications for the logged-in user (sent=1, read=0)"""
-    user_id = get_jwt_identity()
-    user = user_model.get_user_by_id(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+# ============================================================================
+# NEW NOTIFICATION SYSTEM
+# ============================================================================
+
+# Create new notifications table for the new system
+def create_new_notifications_table():
+    """Create the new notifications table"""
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Check if notifications table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
-        table_exists = cursor.fetchone()
+        # Drop old notifications table if it exists
+        cursor.execute("DROP TABLE IF EXISTS notifications")
         
-        if not table_exists:
-            # Return empty array if table doesn't exist
-            conn.close()
-            return jsonify([]), 200
+        # Create new notifications table
+        cursor.execute('''
+        CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            event_id INTEGER,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            notification_type TEXT NOT NULL DEFAULT 'event_reminder',
+            is_read BOOLEAN DEFAULT 0,
+            is_sent BOOLEAN DEFAULT 0,
+            scheduled_for TEXT,
+            sent_at TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (event_id) REFERENCES events (id)
+        )
+        ''')
         
-        # Check if 'read' column exists in notifications table
-        cursor.execute("PRAGMA table_info(notifications)")
-        columns = [row[1] for row in cursor.fetchall()]
+        conn.commit()
+        conn.close()
+        print("✅ New notifications table created successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Error creating notifications table: {e}")
+        return False
+
+# Initialize new notifications table
+create_new_notifications_table()
+
+@app.route('/notifications', methods=['GET'])
+@jwt_required()
+def get_notifications():
+    """Get all notifications for the current user"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT n.id, n.event_id, n.title, n.message, n.notification_type, 
+                   n.is_read, n.is_sent, n.scheduled_for, n.sent_at, n.created_at,
+                   e.title as event_title, e.start_datetime, e.end_datetime
+            FROM notifications n
+            LEFT JOIN events e ON n.event_id = e.id
+            WHERE n.user_id = ?
+            ORDER BY n.created_at DESC
+            LIMIT 50
+        ''', (user['id'],))
         
-        if 'read' in columns:
-            # Use the full query with read column
-            cursor.execute('''
-                SELECT n.id, n.event_id, n.notify_at, n.sent, n.read, e.title, e.start_datetime, e.end_datetime
-                FROM notifications n
-                JOIN events e ON n.event_id = e.id
-                WHERE n.user_id = ? AND n.sent = 1 AND n.read = 0
-                ORDER BY n.notify_at ASC
-            ''', (user['id'],))
-        else:
-            # Fallback query without read column
-            cursor.execute('''
-                SELECT n.id, n.event_id, n.notify_at, n.sent, e.title, e.start_datetime, e.end_datetime
-                FROM notifications n
-                JOIN events e ON n.event_id = e.id
-                WHERE n.user_id = ? AND n.sent = 1
-                ORDER BY n.notify_at ASC
-            ''', (user['id'],))
+        notifications = []
+        for row in cursor.fetchall():
+            notifications.append({
+                'id': row['id'],
+                'event_id': row['event_id'],
+                'title': row['title'],
+                'message': row['message'],
+                'type': row['notification_type'],
+                'is_read': bool(row['is_read']),
+                'is_sent': bool(row['is_sent']),
+                'scheduled_for': row['scheduled_for'],
+                'sent_at': row['sent_at'],
+                'created_at': row['created_at'],
+                'event_title': row['event_title'],
+                'event_start': row['start_datetime'],
+                'event_end': row['end_datetime']
+            })
         
-        notifications = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return jsonify(notifications), 200
+        
     except Exception as e:
-        print(f"❌ Error in get_notifications: {str(e)}")
-        return jsonify([]), 200  # Return empty array instead of error
+        print(f"❌ Error getting notifications: {e}")
+        return jsonify([]), 200
 
 @app.route('/notifications/<int:notif_id>/read', methods=['POST'])
 @jwt_required()
@@ -706,11 +765,12 @@ def mark_notification_read(notif_id):
     user = user_model.get_user_by_id(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
+    
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?
+            UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?
         ''', (notif_id, user['id']))
         conn.commit()
         conn.close()
@@ -718,10 +778,31 @@ def mark_notification_read(notif_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/users/fcm-token', methods=['POST'])
+@app.route('/notifications/mark-all-read', methods=['POST'])
 @jwt_required()
-def update_fcm_token():
-    """Update user's FCM token for push notifications"""
+def mark_all_notifications_read():
+    """Mark all notifications as read for the current user"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE notifications SET is_read = 1 WHERE user_id = ?
+        ''', (user['id'],))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'All notifications marked as read'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/device-token', methods=['POST'])
+@jwt_required()
+def update_device_token():
+    """Update user's device token for push notifications"""
     user_id = get_jwt_identity()
     user = user_model.get_user_by_id(user_id)
     if not user:
@@ -732,43 +813,141 @@ def update_fcm_token():
         if not data:
             return jsonify({'error': 'Request body is required'}), 400
             
-        fcm_token = data.get('fcm_token')
+        device_token = data.get('device_token')
         
-        if not fcm_token:
-            return jsonify({'error': 'FCM token is required'}), 400
+        if not device_token:
+            return jsonify({'error': 'Device token is required'}), 400
         
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Check if users table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-        table_exists = cursor.fetchone()
-        
-        if not table_exists:
-            print("⚠️ users table not found")
-            conn.close()
-            return jsonify({'message': 'FCM token update skipped - users table not found'}), 200
-        
-        # Check if fcm_token column exists in users table
-        cursor.execute("PRAGMA table_info(users)")
-        columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'fcm_token' in columns:
-            cursor.execute('''
-                UPDATE users SET fcm_token = ? WHERE id = ?
-            ''', (fcm_token, user['id']))
-            conn.commit()
-            print(f"✅ FCM token updated for user {user['id']}")
-        else:
-            # If fcm_token column doesn't exist, just return success
-            print("⚠️ fcm_token column not found in users table")
-        
+        # Update device token in users table
+        cursor.execute('''
+            UPDATE users SET fcm_token = ? WHERE id = ?
+        ''', (device_token, user['id']))
+        conn.commit()
         conn.close()
         
-        return jsonify({'message': 'FCM token updated successfully'}), 200
+        return jsonify({'message': 'Device token updated successfully'}), 200
     except Exception as e:
-        print(f"❌ Error in update_fcm_token: {str(e)}")
-        return jsonify({'message': 'FCM token update skipped due to database issue'}), 200
+        print(f"❌ Error updating device token: {str(e)}")
+        return jsonify({'error': 'Failed to update device token'}), 500
+
+# ============================================================================
+# NOTIFICATION ENDPOINTS
+# ============================================================================
+
+@app.route('/notifications/send-event-reminder', methods=['POST'])
+@jwt_required()
+def send_event_reminder():
+    """Send event reminder to all users"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        event_id = data.get('event_id')
+        reminder_minutes = data.get('reminder_minutes', 15)
+        
+        if not event_id:
+            return jsonify({'error': 'Event ID is required'}), 400
+        
+        # Send event reminder
+        success = notification_service.send_event_reminder(event_id, reminder_minutes)
+        
+        if success:
+            return jsonify({'message': 'Event reminder sent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to send event reminder'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/send-system-notification', methods=['POST'])
+@jwt_required()
+def send_system_notification():
+    """Send system notification to all users (admin only)"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Check if user is admin
+    if user.get('role') != 'admin':
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        title = data.get('title')
+        message = data.get('message')
+        notification_type = data.get('type', 'system')
+        
+        if not title or not message:
+            return jsonify({'error': 'Title and message are required'}), 400
+        
+        # Send system notification
+        success = notification_service.send_system_notification(title, message, notification_type)
+        
+        if success:
+            return jsonify({'message': 'System notification sent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to send system notification'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/unread-count', methods=['GET'])
+@jwt_required()
+def get_unread_notifications_count():
+    """Get count of unread notifications for current user"""
+    user_id = get_jwt_identity()
+    user = user_model.get_user_by_id(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) as count FROM notifications 
+            WHERE user_id = ? AND is_read = 0
+        ''', (user['id'],))
+        
+        result = cursor.fetchone()
+        unread_count = result['count'] if result else 0
+        
+        conn.close()
+        return jsonify({'unread_count': unread_count}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/timezone', methods=['GET'])
+def get_timezone_info():
+    """Get timezone information and available timezones"""
+    try:
+        # Get user's timezone based on IP
+        user_timezone = timezone_utils.get_user_timezone(request.remote_addr)
+        current_local_time = timezone_utils.get_current_local_time(user_timezone)
+        timezone_offset = timezone_utils.get_timezone_offset(user_timezone)
+        
+        return jsonify({
+            'current_timezone': user_timezone,
+            'current_local_time': current_local_time.isoformat(),
+            'timezone_offset_hours': timezone_offset,
+            'available_timezones': timezone_utils.get_available_timezones()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("🚀 Starting SQLite Calendar App...")

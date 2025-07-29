@@ -1,99 +1,112 @@
 #!/usr/bin/env python3
 """
-Test script for notification system
-Run this to check if notifications are working properly
+Test script for the new notification system
 """
 
-import sqlite3
-from datetime import datetime, timedelta
+from notification_service import notification_service
+from database import db
+import json
 
-def test_notifications():
+def test_notification_system():
     """Test the notification system"""
-    print("🔔 Testing Notification System")
-    print("=" * 40)
+    print("🧪 Testing Notification System")
+    print("=" * 50)
     
-    # Connect to database
-    conn = sqlite3.connect('calendar_app.db')
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    # Test 1: Create a test notification
+    print("\n1️⃣ Testing notification creation...")
+    notification_id = notification_service.create_notification(
+        user_id=1,  # Assuming user ID 1 exists
+        title="Test Notification",
+        message="This is a test notification from the new system",
+        notification_type="test"
+    )
     
-    # Check notifications table
-    print("\n📊 Current Notifications:")
-    cursor.execute('''
-        SELECT n.id, n.event_id, n.user_id, n.notify_at, n.sent, n.read, e.title
-        FROM notifications n
-        JOIN events e ON n.event_id = e.id
-        ORDER BY n.notify_at DESC
-        LIMIT 10
-    ''')
-    
-    notifications = cursor.fetchall()
-    if notifications:
-        for notif in notifications:
-            status = "✅ Sent" if notif['sent'] else "⏳ Pending"
-            read_status = "📖 Read" if notif['read'] else "📬 Unread"
-            print(f"ID: {notif['id']} | Event: {notif['title']} | {status} | {read_status}")
-            print(f"   Notify at: {notif['notify_at']}")
+    if notification_id:
+        print(f"✅ Test notification created with ID: {notification_id}")
     else:
-        print("❌ No notifications found")
+        print("❌ Failed to create test notification")
     
-    # Check events
-    print("\n📅 Recent Events:")
-    cursor.execute('''
-        SELECT id, title, start_datetime, created_at
-        FROM events
-        ORDER BY created_at DESC
-        LIMIT 5
-    ''')
-    
-    events = cursor.fetchall()
-    if events:
-        for event in events:
-            print(f"ID: {event['id']} | {event['title']}")
-            print(f"   Start: {event['start_datetime']}")
-    else:
-        print("❌ No events found")
-    
-    # Check users
-    print("\n👥 Users:")
-    cursor.execute('SELECT id, email, first_name, last_name FROM users LIMIT 5')
-    users = cursor.fetchall()
-    if users:
-        for user in users:
-            print(f"ID: {user['id']} | {user['first_name']} {user['last_name']} ({user['email']})")
-    else:
-        print("❌ No users found")
-    
-    # Test notification creation
-    print("\n🧪 Creating Test Notification:")
+    # Test 2: Check notifications in database
+    print("\n2️⃣ Checking notifications in database...")
     try:
-        # Get first user and event
-        cursor.execute('SELECT id FROM users LIMIT 1')
-        user = cursor.fetchone()
-        cursor.execute('SELECT id, start_datetime FROM events LIMIT 1')
-        event = cursor.fetchone()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, user_id, title, message, notification_type, is_read, is_sent, created_at
+            FROM notifications ORDER BY created_at DESC LIMIT 5
+        ''')
         
-        if user and event:
-            # Create a test notification for 1 minute from now
-            test_time = (datetime.utcnow() + timedelta(minutes=1)).isoformat()
-            cursor.execute('''
-                INSERT INTO notifications (event_id, user_id, notify_at, sent, read)
-                VALUES (?, ?, ?, 0, 0)
-            ''', (event['id'], user['id'], test_time))
-            conn.commit()
-            print(f"✅ Created test notification for user {user['id']}, event {event['id']}")
-            print(f"   Will trigger at: {test_time}")
-        else:
-            print("❌ Need at least one user and event to create test notification")
+        notifications = cursor.fetchall()
+        conn.close()
+        
+        print(f"📊 Found {len(notifications)} notifications in database:")
+        for notif in notifications:
+            print(f"   ID: {notif['id']}, User: {notif['user_id']}, Title: {notif['title']}, Type: {notif['notification_type']}")
+            
     except Exception as e:
-        print(f"❌ Error creating test notification: {e}")
+        print(f"❌ Error checking notifications: {e}")
     
-    conn.close()
-    print("\n" + "=" * 40)
-    print("🎯 Next steps:")
-    print("1. Wait 1-2 minutes for the scheduler to run")
-    print("2. Check Railway logs for notification messages")
-    print("3. Check your app's notification page")
+    # Test 3: Test system notification (without sending)
+    print("\n3️⃣ Testing system notification creation...")
+    try:
+        # Get all users
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, email, first_name, last_name FROM users WHERE is_active = 1')
+        users = cursor.fetchall()
+        conn.close()
+        
+        print(f"👥 Found {len(users)} active users:")
+        for user in users:
+            print(f"   {user['first_name']} {user['last_name']} ({user['email']})")
+        
+        # Create system notification for each user
+        for user in users:
+            notification_id = notification_service.create_notification(
+                user_id=user['id'],
+                title="System Test",
+                message="This is a test system notification",
+                notification_type="system"
+            )
+            if notification_id:
+                print(f"✅ Created system notification for {user['first_name']}")
+        
+    except Exception as e:
+        print(f"❌ Error testing system notifications: {e}")
+    
+    # Test 4: Check notification counts
+    print("\n4️⃣ Checking notification statistics...")
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Total notifications
+        cursor.execute('SELECT COUNT(*) as total FROM notifications')
+        total = cursor.fetchone()['total']
+        
+        # Unread notifications
+        cursor.execute('SELECT COUNT(*) as unread FROM notifications WHERE is_read = 0')
+        unread = cursor.fetchone()['unread']
+        
+        # Sent notifications
+        cursor.execute('SELECT COUNT(*) as sent FROM notifications WHERE is_sent = 1')
+        sent = cursor.fetchone()['sent']
+        
+        conn.close()
+        
+        print(f"📊 Notification Statistics:")
+        print(f"   Total: {total}")
+        print(f"   Unread: {unread}")
+        print(f"   Sent: {sent}")
+        
+    except Exception as e:
+        print(f"❌ Error checking statistics: {e}")
+    
+    print("\n✅ Notification system test completed!")
+    print("\n📝 Next steps:")
+    print("   1. Configure email settings in config.env")
+    print("   2. Configure Firebase for push notifications")
+    print("   3. Test with real event reminders")
 
 if __name__ == "__main__":
-    test_notifications() 
+    test_notification_system() 

@@ -19,6 +19,16 @@ from events import Event
 from notification_service import notification_service
 from timezone_utils import timezone_utils
 
+# Import password persistence system
+try:
+    from password_persistence import PasswordPersistence
+    password_persistence = PasswordPersistence()
+    PASSWORD_PERSISTENCE_AVAILABLE = True
+    print("✅ Password persistence system loaded")
+except ImportError:
+    print("⚠️ Password persistence system not available")
+    PASSWORD_PERSISTENCE_AVAILABLE = False
+
 # Optional imports for notifications (backend will work without these)
 try:
     from firebase_service import send_event_reminder_notification
@@ -150,6 +160,14 @@ def signup():
         )
         
         if result['success']:
+            # Backup passwords after successful signup
+            if PASSWORD_PERSISTENCE_AVAILABLE:
+                try:
+                    password_persistence.backup_all_passwords()
+                    print("💾 Password backup updated after new user signup")
+                except Exception as e:
+                    print(f"⚠️ Password backup failed: {e}")
+            
             return jsonify({'message': 'User created successfully'}), 201
         else:
             return jsonify({'error': result['error']}), 400
@@ -447,6 +465,14 @@ def change_password():
             return jsonify({'error': 'Old and new password required'}), 400
         result = user_model.change_password(user['id'], old_password, new_password)
         if result['success']:
+            # Backup passwords after successful password change
+            if PASSWORD_PERSISTENCE_AVAILABLE:
+                try:
+                    password_persistence.backup_all_passwords()
+                    print("💾 Password backup updated after password change")
+                except Exception as e:
+                    print(f"⚠️ Password backup failed: {e}")
+            
             return jsonify({'message': 'Password changed successfully'}), 200
         else:
             return jsonify({'error': result['error']}), 400
@@ -961,6 +987,24 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"⚠️ Migration warning: {str(e)}")
         print("💡 App will continue, but you may need to run migration manually")
+    
+    # Automatic password persistence management
+    if PASSWORD_PERSISTENCE_AVAILABLE:
+        try:
+            print("🔐 Managing password persistence...")
+            
+            # Check if password backup exists
+            if os.path.exists('password_backup.json'):
+                print("📦 Password backup found - restoring passwords...")
+                password_persistence.restore_all_passwords()
+            else:
+                print("💾 Creating initial password backup...")
+                password_persistence.backup_all_passwords()
+            
+            print("✅ Password persistence management completed")
+        except Exception as e:
+            print(f"⚠️ Password persistence warning: {str(e)}")
+            print("💡 App will continue, but password persistence may not work")
     
     print("📊 Features available:")
     print("   ✅ User signup (employee/admin)")

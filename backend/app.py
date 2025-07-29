@@ -764,8 +764,16 @@ if __name__ == '__main__':
     
     app.run(debug=True, port=5000)
 
-# Add startup message for Railway
-print("🚀 CalSync Backend starting up...")
-print(f"📁 Database path: {db.db_path}")
-print(f"🔧 JWT Secret: {'Set' if os.getenv('SECRET_KEY') else 'Using default'}")
-print("✅ App initialization complete!")
+# Add startup message for Railway (moved to safer location)
+def print_startup_info():
+    try:
+        print("🚀 CalSync Backend starting up...")
+        print(f"📁 Database path: {db.db_path}")
+        print(f"🔧 JWT Secret: {'Set' if os.getenv('SECRET_KEY') else 'Using default'}")
+        print("✅ App initialization complete!")
+    except Exception as e:
+        print(f"⚠️ Could not print startup info: {e}")
+        print("🚀 CalSync Backend starting up...")
+
+# Call startup info function
+print_startup_info()

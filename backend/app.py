@@ -9,12 +9,11 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import secrets
 from datetime import datetime, timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from dotenv import load_dotenv
 
 # Import models and database
-import database as db
+from database import db
 from users import User
 from events import Event
 
@@ -127,68 +126,12 @@ try:
 except Exception as e:
     print(f"⚠️ Could not add 'read' column to notifications: {e}")
 
-def send_due_notifications():
-    """Send notifications for events that are due"""
-    try:
-        now = datetime.now()
-        
-        # Get all due notifications with user info
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT n.id, n.event_id, n.user_id, n.notify_at, e.title, e.start_datetime, e.description,
-                   u.email, u.first_name, u.last_name, u.fcm_token
-            FROM notifications n
-            JOIN events e ON n.event_id = e.id
-            JOIN users u ON n.user_id = u.id
-            WHERE n.sent = 0 AND n.notify_at <= ?
-        ''', (now,))
-        
-        notifications = cursor.fetchall()
-        
-        for notification in notifications:
-            notification_id, event_id, user_id, notify_at, title, start_datetime, description, email, first_name, last_name, fcm_token = notification
-            
-            # Format event time
-            event_time = start_datetime.strftime("%B %d, %Y at %I:%M %p")
-            user_name = f"{first_name} {last_name}".strip()
-            
-            # PRIORITY 1: Send Push Notification (Primary)
-            success = False
-            if fcm_token:
-                try:
-                    success = send_event_reminder_notification([fcm_token], title, event_time, event_id)
-                    if success:
-                        print(f"✅ Push notification sent to {user_name} for event: {title}")
-                    else:
-                        print(f"❌ Failed to send push notification to {user_name}")
-                except Exception as e:
-                    print(f"❌ Error sending push notification to {user_name}: {e}")
-            
-            # PRIORITY 2: Send Email Notification (Fallback only if push fails or no FCM token)
-            if not fcm_token or not success:
-                try:
-                    email_success = send_event_reminder_email(email, user_name, title, event_time, description)
-                    if email_success:
-                        print(f"✅ Email notification sent to {user_name} for event: {title}")
-                    else:
-                        print(f"❌ Failed to send email notification to {user_name}")
-                except Exception as e:
-                    print(f"❌ Error sending email notification to {user_name}: {e}")
-            
-            # Mark notification as sent
-            cursor.execute('UPDATE notifications SET sent = 1 WHERE id = ?', (notification_id,))
-            conn.commit()
-        
-        conn.close()
-            
-    except Exception as e:
-        print(f"❌ Error in send_due_notifications: {e}")
+# Notification system temporarily disabled to prevent database errors
+# def send_due_notifications():
+#     """Send notifications for events that are due"""
+#     pass
 
-# Start background scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(send_due_notifications, 'interval', minutes=1)
-scheduler.start()
+print("⚠️ Background scheduler and notifications disabled - will be re-enabled later")
 
 # Authentication Routes
 @app.route('/auth/signup', methods=['POST'])
@@ -868,7 +811,7 @@ if __name__ == '__main__':
 def print_startup_info():
     try:
         print("🚀 CalSync Backend starting up...")
-        print(f"📁 Database path: {db.db_path}")
+        print(f"📁 Database path: calendar_app.db")
         print(f"🔧 JWT Secret: {'Set' if os.getenv('SECRET_KEY') else 'Using default'}")
         print("✅ App initialization complete!")
     except Exception as e:

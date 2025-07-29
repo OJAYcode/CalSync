@@ -826,6 +826,17 @@ def update_fcm_token():
 
 if __name__ == '__main__':
     print("🚀 Starting SQLite Calendar App...")
+    
+    # Run database migration to ensure user credentials persist
+    try:
+        print("🔄 Running database migration...")
+        from scripts.migrate_database import migrate_database
+        migrate_database()
+        print("✅ Database migration completed")
+    except Exception as e:
+        print(f"⚠️ Migration warning: {str(e)}")
+        print("💡 App will continue, but you may need to run migration manually")
+    
     print("📊 Features available:")
     print("   ✅ User signup (employee/admin)")
     print("   ✅ User login/logout")

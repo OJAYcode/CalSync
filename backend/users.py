@@ -22,11 +22,17 @@ class User:
     
     @staticmethod
     def verify_password(password, hashed_password):
-        """Verify password against hash"""
+        """Verify password against hash (supports both old and new formats)"""
         try:
-            salt, stored_hash = hashed_password.split('$')
-            password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
-            return password_hash == stored_hash
+            # Check if it's the new salted format
+            if '$' in hashed_password:
+                salt, stored_hash = hashed_password.split('$')
+                password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+                return password_hash == stored_hash
+            else:
+                # Old format - simple SHA256
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                return password_hash == hashed_password
         except:
             return False
     

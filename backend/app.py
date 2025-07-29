@@ -53,9 +53,31 @@ jwt = JWTManager(app)
 CORS(app, origins="*")
 
 # Database is automatically initialized when imported
-# Create model instances
-user_model = User()
-event_model = Event()
+# Create model instances with error handling
+try:
+    user_model = User()
+    event_model = Event()
+    print("✅ User and Event models initialized successfully")
+except Exception as e:
+    print(f"❌ Error initializing models: {e}")
+    # Create fallback models
+    class FallbackUser:
+        def get_user_by_id(self, user_id):
+            return None
+        def get_all_users(self):
+            return []
+        def update_user(self, user_id, data):
+            return {'success': False, 'error': 'Model not available'}
+        def change_password(self, user_id, old_password, new_password):
+            return {'success': False, 'error': 'Model not available'}
+    
+    class FallbackEvent:
+        def delete_event(self, event_id):
+            return False
+    
+    user_model = FallbackUser()
+    event_model = FallbackEvent()
+    print("⚠️ Using fallback models due to initialization error")
 
 def create_notifications_for_event(event_id, start_datetime, reminders):
     """Create notification records for all users for each reminder time (in minutes)"""
@@ -85,8 +107,9 @@ try:
         cursor.execute('ALTER TABLE notifications ADD COLUMN read BOOLEAN DEFAULT 0')
         conn.commit()
     conn.close()
+    print("✅ Database schema check completed")
 except Exception as e:
-    print(f"Could not add 'read' column to notifications: {e}")
+    print(f"⚠️ Could not add 'read' column to notifications: {e}")
 
 def send_due_notifications():
     """Send notifications for events that are due"""
@@ -740,3 +763,9 @@ if __name__ == '__main__':
     print("🌐 Frontend should connect to: http://localhost:5000")
     
     app.run(debug=True, port=5000)
+
+# Add startup message for Railway
+print("🚀 CalSync Backend starting up...")
+print(f"📁 Database path: {db.db_path}")
+print(f"🔧 JWT Secret: {'Set' if os.getenv('SECRET_KEY') else 'Using default'}")
+print("✅ App initialization complete!")

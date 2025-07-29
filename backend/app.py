@@ -217,8 +217,9 @@ def login():
         result = user_model.login_user(data['email'], data['password'])
         
         if result['success']:
-            # Create JWT token
-            access_token = create_access_token(identity=result['user']['id'])
+            # Create JWT token - ensure user ID is a string
+            user_id = str(result['user']['id'])  # Convert to string
+            access_token = create_access_token(identity=user_id)
             
             return jsonify({
                 'message': 'Login successful',
@@ -263,6 +264,13 @@ def create_event():
         # Get user ID from JWT token
         user_id = get_jwt_identity()
         print(f"👤 User ID from JWT: {user_id}")
+        
+        # Convert user_id to int if it's a string (for database lookup)
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                return jsonify({'error': 'Invalid user ID format'}), 400
         
         # Get user data
         user = user_model.get_user_by_id(user_id)
@@ -347,6 +355,14 @@ def get_event_stats():
 def delete_event(event_id):
     """Delete an event by ID (admin or event creator)"""
     user_id = get_jwt_identity()
+    
+    # Convert user_id to int if it's a string (for database lookup)
+    if isinstance(user_id, str):
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid user ID format'}), 400
+    
     user = user_model.get_user_by_id(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
@@ -832,9 +848,18 @@ def test_token():
         try:
             from flask_jwt_extended import decode_token
             decoded = decode_token(token)
+            
+            # Convert user_id to int if it's a string
+            user_id = decoded['sub']
+            if isinstance(user_id, str):
+                try:
+                    user_id = int(user_id)
+                except ValueError:
+                    pass  # Keep as string if conversion fails
+            
             return jsonify({
                 'valid': True,
-                'user_id': decoded['sub'],
+                'user_id': user_id,
                 'expires': decoded['exp'],
                 'issued_at': decoded['iat']
             }), 200

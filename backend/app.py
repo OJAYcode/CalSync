@@ -286,19 +286,35 @@ def get_event_stats():
 @app.route('/events/<int:event_id>', methods=['DELETE'])
 @jwt_required()
 def delete_event(event_id):
-    """Delete an event by ID (admin only)"""
+    """Delete an event by ID (admin or event creator)"""
     user_id = get_jwt_identity()
     user = user_model.get_user_by_id(user_id)
-    if not user or user.get('role') != 'admin':
-        return jsonify({'error': 'Admin access required'}), 403
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
     try:
+        # Check if user is admin or the event creator
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT created_by FROM events WHERE id = ?', (event_id,))
+        event = cursor.fetchone()
+        conn.close()
+        
+        if not event:
+            return jsonify({'error': 'Event not found'}), 404
+        
+        # Allow admin or event creator to delete
+        if user.get('role') != 'admin' and event['created_by'] != user['id']:
+            return jsonify({'error': 'Access denied. Only admin or event creator can delete events'}), 403
+        
         success = event_model.delete_event(event_id)
         if success:
             return jsonify({'message': 'Event deleted successfully'}), 200
         else:
             return jsonify({'error': 'Failed to delete event'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ Error in delete_event: {str(e)}")
+        return jsonify({'error': 'Failed to delete event'}), 500
 
 # User Routes
 @app.route('/users/me', methods=['GET'])
@@ -482,6 +498,16 @@ def list_department_feeds():
         department = request.args.get('department')
         conn = db.get_connection()
         cursor = conn.cursor()
+        
+        # Check if department_feeds table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='department_feeds'")
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            # Return empty array if table doesn't exist
+            conn.close()
+            return jsonify([]), 200
+        
         if department:
             cursor.execute('SELECT * FROM department_feeds WHERE department = ? ORDER BY created_at DESC', (department,))
         else:
@@ -490,7 +516,8 @@ def list_department_feeds():
         conn.close()
         return jsonify(feeds), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ Error in list_department_feeds: {str(e)}")
+        return jsonify([]), 200  # Return empty array instead of error
 
 @app.route('/department-feeds', methods=['POST'])
 @jwt_required()
@@ -577,6 +604,15 @@ def get_notifications():
         conn = db.get_connection()
         cursor = conn.cursor()
         
+        # Check if notifications table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            # Return empty array if table doesn't exist
+            conn.close()
+            return jsonify([]), 200
+        
         # Check if 'read' column exists in notifications table
         cursor.execute("PRAGMA table_info(notifications)")
         columns = [row[1] for row in cursor.fetchall()]
@@ -649,6 +685,15 @@ def update_fcm_token():
         conn = db.get_connection()
         cursor = conn.cursor()
         
+        # Check if users table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            print("⚠️ users table not found")
+            conn.close()
+            return jsonify({'message': 'FCM token update skipped - users table not found'}), 200
+        
         # Check if fcm_token column exists in users table
         cursor.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in cursor.fetchall()]
@@ -657,11 +702,12 @@ def update_fcm_token():
             cursor.execute('''
                 UPDATE users SET fcm_token = ? WHERE id = ?
             ''', (fcm_token, user['id']))
+            conn.commit()
+            print(f"✅ FCM token updated for user {user['id']}")
         else:
             # If fcm_token column doesn't exist, just return success
             print("⚠️ fcm_token column not found in users table")
         
-        conn.commit()
         conn.close()
         
         return jsonify({'message': 'FCM token updated successfully'}), 200

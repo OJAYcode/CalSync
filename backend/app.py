@@ -17,8 +17,27 @@ from dotenv import load_dotenv
 import database as db
 from users import User
 from events import Event
-from firebase_service import send_event_reminder_notification
-from email_service import send_event_reminder_email
+
+# Optional imports for notifications (backend will work without these)
+try:
+    from firebase_service import send_event_reminder_notification
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    print("⚠️ Firebase service not available - push notifications disabled")
+    FIREBASE_AVAILABLE = False
+    def send_event_reminder_notification(*args, **kwargs):
+        print("❌ Push notification not sent - Firebase not configured")
+        return False
+
+try:
+    from email_service import send_event_reminder_email
+    EMAIL_AVAILABLE = True
+except ImportError:
+    print("⚠️ Email service not available - email notifications disabled")
+    EMAIL_AVAILABLE = False
+    def send_event_reminder_email(*args, **kwargs):
+        print("❌ Email notification not sent - Email service not configured")
+        return False
 
 # Load environment variables
 load_dotenv('config.env')
@@ -33,9 +52,7 @@ jwt = JWTManager(app)
 # Enable CORS for all origins (for production deployment)
 CORS(app, origins="*")
 
-# Initialize database
-db.init_database()
-
+# Database is automatically initialized when imported
 # Create model instances
 user_model = User()
 event_model = Event()
@@ -130,9 +147,6 @@ def send_due_notifications():
 scheduler = BackgroundScheduler()
 scheduler.add_job(send_due_notifications, 'interval', minutes=1)
 scheduler.start()
-
-# Force database schema and default data initialization on every backend start
-db.init_database()
 
 # Authentication Routes
 @app.route('/auth/signup', methods=['POST'])

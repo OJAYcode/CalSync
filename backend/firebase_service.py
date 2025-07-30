@@ -10,13 +10,20 @@ import os
 from datetime import datetime
 
 # Initialize Firebase Admin SDK
-# For production, you should use a service account key file
-# For now, we'll use the default credentials (works with Railway)
+# Use service account key file for authentication
 try:
     firebase_admin.get_app()
 except ValueError:
-    # Initialize the app only if it hasn't been initialized
-    firebase_admin.initialize_app()
+    # Initialize the app with service account credentials
+    service_account_path = os.path.join(os.path.dirname(__file__), 'firebase-service-account.json')
+    if os.path.exists(service_account_path):
+        cred = credentials.Certificate(service_account_path)
+        firebase_admin.initialize_app(cred)
+        print("✅ Firebase initialized with service account")
+    else:
+        # Fallback to default credentials
+        firebase_admin.initialize_app()
+        print("⚠️ Firebase initialized with default credentials (service account not found)")
 
 def send_push_notification(token, title, body, data=None):
     """

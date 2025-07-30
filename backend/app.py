@@ -130,18 +130,48 @@ def create_notifications_for_event(event_id, start_datetime, reminders):
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
+        
+        # Get event details
+        cursor.execute('SELECT title, description FROM events WHERE id = ?', (event_id,))
+        event = cursor.fetchone()
+        if not event:
+            print(f"❌ Event {event_id} not found for notification creation")
+            return
+        
+        event_title = event[0]
+        event_description = event[1] or "No description provided"
+        
+        # Get all users
         users = user_model.get_all_users()
+        
         for reminder in reminders:
+            # Calculate notification time
             notify_at = (datetime.fromisoformat(start_datetime) - timedelta(minutes=reminder)).isoformat()
+            
+            # Create notification for each user
             for user in users:
+                # Create notification title and message
+                title = f"Event Reminder: {event_title}"
+                message = f"Your event '{event_title}' starts in {reminder} minutes. {event_description}"
+                
                 cursor.execute('''
-                    INSERT INTO notifications (event_id, user_id, notify_at, sent)
-                    VALUES (?, ?, ?, 0)
-                ''', (event_id, user['id'], notify_at))
+                    INSERT INTO notifications (
+                        user_id, event_id, title, message, notification_type,
+                        is_read, is_sent, scheduled_for, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 0, ?, CURRENT_TIMESTAMP)
+                ''', (
+                    user['id'], event_id, title, message, 'event_reminder', notify_at
+                ))
+        
         conn.commit()
         conn.close()
+        print(f"✅ Created {len(users) * len(reminders)} notifications for event {event_id}")
+        
     except Exception as e:
-        print(f"Error creating notifications: {e}")
+        print(f"❌ Error creating notifications: {e}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
 
 # Add 'read' column to notifications table if not present
 try:
@@ -157,12 +187,74 @@ try:
 except Exception as e:
     print(f"⚠️ Could not add 'read' column to notifications: {e}")
 
-# Notification system temporarily disabled to prevent database errors
-# def send_due_notifications():
-#     """Send notifications for events that are due"""
-#     pass
+def send_due_notifications():
+    """Send notifications for events that are due"""
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get notifications that are due to be sent
+        current_time = datetime.now().isoformat()
+        cursor.execute('''
+            SELECT n.id, n.user_id, n.event_id, n.title, n.message, n.notification_type,
+                   COALESCE(u.fcm_token, '') as fcm_token, u.email, u.first_name, u.last_name
+            FROM notifications n
+            JOIN users u ON n.user_id = u.id
+            WHERE n.scheduled_for <= ? AND n.is_sent = 0
+        ''', (current_time,))
+        
+        due_notifications = cursor.fetchall()
+        
+        for notification in due_notifications:
+            notif_id, user_id, event_id, title, message, notif_type, fcm_token, email, first_name, last_name = notification
+            
+            # Mark as sent
+            cursor.execute('UPDATE notifications SET is_sent = 1, sent_at = CURRENT_TIMESTAMP WHERE id = ?', (notif_id,))
+            
+            # Send push notification if FCM token available
+            if fcm_token and FIREBASE_AVAILABLE:
+                try:
+                    send_event_reminder_notification(fcm_token, title, message)
+                    print(f"✅ Push notification sent to {first_name} {last_name}")
+                except Exception as e:
+                    print(f"❌ Failed to send push notification: {e}")
+            
+            # Send email notification if email service available
+            if email and EMAIL_AVAILABLE:
+                try:
+                    send_event_reminder_email(email, first_name, title, message)
+                    print(f"✅ Email notification sent to {email}")
+                except Exception as e:
+                    print(f"❌ Failed to send email notification: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        if due_notifications:
+            print(f"✅ Processed {len(due_notifications)} notifications")
+        
+    except Exception as e:
+        print(f"❌ Error sending due notifications: {e}")
 
-print("⚠️ Background scheduler and notifications disabled - will be re-enabled later")
+# Start background scheduler for notifications
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=send_due_notifications,
+        trigger=IntervalTrigger(minutes=1),  # Check every minute
+        id='send_notifications',
+        name='Send due notifications',
+        replace_existing=True
+    )
+    scheduler.start()
+    print("✅ Background notification scheduler started")
+except ImportError:
+    print("⚠️ APScheduler not available - notifications will be sent manually")
+except Exception as e:
+    print(f"⚠️ Failed to start notification scheduler: {e}")
 
 # Authentication Routes
 @app.route('/auth/signup', methods=['POST'])
@@ -983,6 +1075,75 @@ def send_event_reminder():
     user = user_model.get_user_by_id(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
+
+@app.route('/users/fcm-token', methods=['POST'])
+@jwt_required()
+def update_fcm_token():
+    """Update user's FCM token for push notifications"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        fcm_token = data.get('fcm_token')
+        
+        if not fcm_token:
+            return jsonify({'error': 'FCM token is required'}), 400
+        
+        # Update user's FCM token
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('UPDATE users SET fcm_token = ? WHERE id = ?', (fcm_token, user_id))
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ FCM token updated for user {user_id}")
+        return jsonify({'message': 'FCM token updated successfully'}), 200
+        
+    except Exception as e:
+        print(f"❌ Error updating FCM token: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/test', methods=['POST'])
+@jwt_required()
+def test_notifications():
+    """Test notification system by sending a test notification"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Create a test notification in the database
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            INSERT INTO notifications (
+                user_id, event_id, title, message, notification_type,
+                is_read, is_sent, scheduled_for, created_at
+            )
+            VALUES (?, NULL, ?, ?, ?, 0, 0, ?, CURRENT_TIMESTAMP)
+        ''', (
+            user['id'],
+            'Test Notification',
+            'This is a test notification to verify the system is working.',
+            'test',
+            datetime.now().isoformat()
+        ))
+
+        notification_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'message': 'Test notification created successfully',
+            'notification_id': notification_id,
+            'user_id': user['id']
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     
     try:
         data = request.get_json()
@@ -1004,6 +1165,42 @@ def send_event_reminder():
             return jsonify({'error': 'Failed to send event reminder'}), 500
             
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/test-push', methods=['POST'])
+@jwt_required()
+def test_push_notification():
+    """Test push notification by sending a test notification to the current user's device"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        if not user.get('fcm_token'):
+            return jsonify({'error': 'No FCM token found for user. Please allow notifications in your browser.'}), 400
+
+        if not FIREBASE_AVAILABLE:
+            return jsonify({'error': 'Firebase not configured'}), 500
+
+        # Send test push notification
+        title = "🧪 Test Push Notification"
+        message = f"Hello {user['first_name']}! This is a test push notification from CalSync."
+        
+        success = send_event_reminder_notification([user['fcm_token']], title, message, 0)
+        
+        if success:
+            return jsonify({
+                'message': 'Test push notification sent successfully',
+                'user_id': user['id'],
+                'fcm_token': user['fcm_token'][:20] + '...'  # Show first 20 chars for security
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to send push notification'}), 500
+
+    except Exception as e:
+        print(f"❌ Error sending test push notification: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/notifications/send-system-notification', methods=['POST'])

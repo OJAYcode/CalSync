@@ -498,16 +498,18 @@ const Dashboard = ({ logout }) => {
                     <li key={notif.id} className="px-2 sm:px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                       <div>
                         <span className="font-medium text-gray-900">{notif.title}</span>
-                        <span className="ml-2 text-xs text-gray-500">{new Date(notif.notify_at).toLocaleString()}</span>
-                        <div className="text-xs text-gray-400">{notif.body}</div>
+                        <span className="ml-2 text-xs text-gray-500">{new Date(notif.created_at).toLocaleString()}</span>
+                        <div className="text-xs text-gray-400">{notif.message}</div>
                       </div>
-                      <button onClick={() => markAsRead(notif.id)} className="text-xs text-blue-600 hover:underline mt-1">Mark as read</button>
+                      {!notif.is_read && (
+                        <button onClick={() => markAsRead(notif.id)} className="text-xs text-blue-600 hover:underline mt-1">Mark as read</button>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
               <div className="mt-2 text-right">
-                <button onClick={() => setShowNotif(false)} className="text-blue-600 hover:underline font-medium">View all notifications &rarr;</button>
+                <Link to="/notifications" className="text-blue-600 hover:underline font-medium">View all notifications &rarr;</Link>
               </div>
             </div>
 

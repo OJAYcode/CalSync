@@ -1350,15 +1350,28 @@ def get_expired_events():
 if __name__ == '__main__':
     print("🚀 Starting SQLite Calendar App...")
     
-    # Run database migration to ensure user credentials persist
+    # Run persistent user backup system to ensure user credentials persist
     try:
-        print("🔄 Running database migration...")
-        from scripts.migrate_database import migrate_database
-        migrate_database()
-        print("✅ Database migration completed")
+        print("🔄 Running persistent user backup system...")
+        from scripts.persistent_user_backup import PersistentUserBackup
+        backup_system = PersistentUserBackup()
+        
+        # Backup current users
+        backup_system.backup_users()
+        
+        # Restore users from backup
+        backup_system.restore_users()
+        
+        # Create default users if none exist
+        backup_system.create_default_users()
+        
+        # Reset passwords to known values for deployment
+        backup_system.reset_user_passwords()
+        
+        print("✅ Persistent user backup system completed")
     except Exception as e:
-        print(f"⚠️ Migration warning: {str(e)}")
-        print("💡 App will continue, but you may need to run migration manually")
+        print(f"⚠️ Persistent backup warning: {str(e)}")
+        print("💡 App will continue, but you may need to run backup manually")
     
     # Bulletproof user system management
     if BULLETPROOF_SYSTEM_AVAILABLE:

@@ -1,1 +1,10 @@
-"backend/firebase-service-account.json" 
+# Firebase credentials (sensitive)
+backend/firebase-service-account.json
+
+# Database backups (keep user backups in git for persistence)
+backend/calendar_app.db.backup_*
+backend/*.db.backup_*
+
+# Keep user backup files in git for persistence across deployments
+!backend/user_backups/
+!backend/user_backups/users_backup.json 

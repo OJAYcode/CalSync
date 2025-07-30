@@ -1149,66 +1149,6 @@ def get_expired_events():
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-@jwt_required()
-def trigger_event_cleanup():
-    """Manually trigger cleanup of expired events (admin only)"""
-    try:
-        user_id = get_jwt_identity()
-        user = user_model.get_user_by_id(user_id)
-        
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-        
-        if AUTO_CLEANUP_AVAILABLE:
-            from auto_cleanup_events import auto_cleanup
-            auto_cleanup.cleanup_all_expired_events_now()
-            
-            # Get count of remaining events
-            remaining_count = auto_cleanup.get_expired_events_count()
-            
-            return jsonify({
-                'message': 'Event cleanup completed',
-                'remaining_expired_events': remaining_count
-            }), 200
-        else:
-            return jsonify({'error': 'Automatic cleanup system not available'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/events/expired', methods=['GET'])
-@jwt_required()
-def get_expired_events():
-    """Get count of expired events (admin only)"""
-    try:
-        user_id = get_jwt_identity()
-        user = user_model.get_user_by_id(user_id)
-        
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-        
-        if AUTO_CLEANUP_AVAILABLE:
-            from auto_cleanup_events import auto_cleanup
-            expired_count = auto_cleanup.get_expired_events_count()
-            expired_events = auto_cleanup.list_expired_events()
-            
-            return jsonify({
-                'expired_count': expired_count,
-                'expired_events': [
-                    {
-                        'id': event['id'],
-                        'title': event['title'],
-                        'end_datetime': event['end_datetime'],
-                        'created_at': event['created_at']
-                    }
-                    for event in expired_events
-                ]
-            }), 200
-        else:
-            return jsonify({'error': 'Automatic cleanup system not available'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("🚀 Starting SQLite Calendar App...")

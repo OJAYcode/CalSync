@@ -19,7 +19,26 @@ from events import Event
 from notification_service import notification_service
 from timezone_utils import timezone_utils
 
-# Import password persistence system
+# Import bulletproof user system
+try:
+    from bulletproof_user_system import BulletproofUserSystem
+    bulletproof_system = BulletproofUserSystem()
+    BULLETPROOF_SYSTEM_AVAILABLE = True
+    print("✅ Bulletproof user system loaded")
+except ImportError:
+    print("⚠️ Bulletproof user system not available")
+    BULLETPROOF_SYSTEM_AVAILABLE = False
+
+# Import automatic event cleanup system
+try:
+    from auto_cleanup_events import start_auto_cleanup, cleanup_expired_events
+    AUTO_CLEANUP_AVAILABLE = True
+    print("✅ Automatic event cleanup system loaded")
+except ImportError:
+    print("⚠️ Automatic event cleanup system not available")
+    AUTO_CLEANUP_AVAILABLE = False
+
+# Import password persistence system (legacy)
 try:
     from password_persistence import PasswordPersistence
     password_persistence = PasswordPersistence()
@@ -1068,6 +1087,129 @@ def get_timezone_info():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Automatic Event Cleanup Endpoints
+@app.route('/events/cleanup', methods=['POST'])
+@jwt_required()
+def trigger_event_cleanup():
+    """Manually trigger cleanup of expired events (admin only)"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+        
+        if not user or user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if AUTO_CLEANUP_AVAILABLE:
+            from auto_cleanup_events import auto_cleanup
+            auto_cleanup.cleanup_all_expired_events_now()
+            
+            # Get count of remaining events
+            remaining_count = auto_cleanup.get_expired_events_count()
+            
+            return jsonify({
+                'message': 'Event cleanup completed',
+                'remaining_expired_events': remaining_count
+            }), 200
+        else:
+            return jsonify({'error': 'Automatic cleanup system not available'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/events/expired', methods=['GET'])
+@jwt_required()
+def get_expired_events():
+    """Get count of expired events (admin only)"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+        
+        if not user or user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if AUTO_CLEANUP_AVAILABLE:
+            from auto_cleanup_events import auto_cleanup
+            expired_count = auto_cleanup.get_expired_events_count()
+            expired_events = auto_cleanup.list_expired_events()
+            
+            return jsonify({
+                'expired_count': expired_count,
+                'expired_events': [
+                    {
+                        'id': event['id'],
+                        'title': event['title'],
+                        'end_datetime': event['end_datetime'],
+                        'created_at': event['created_at']
+                    }
+                    for event in expired_events
+                ]
+            }), 200
+        else:
+            return jsonify({'error': 'Automatic cleanup system not available'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+@jwt_required()
+def trigger_event_cleanup():
+    """Manually trigger cleanup of expired events (admin only)"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+        
+        if not user or user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if AUTO_CLEANUP_AVAILABLE:
+            from auto_cleanup_events import auto_cleanup
+            auto_cleanup.cleanup_all_expired_events_now()
+            
+            # Get count of remaining events
+            remaining_count = auto_cleanup.get_expired_events_count()
+            
+            return jsonify({
+                'message': 'Event cleanup completed',
+                'remaining_expired_events': remaining_count
+            }), 200
+        else:
+            return jsonify({'error': 'Automatic cleanup system not available'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/events/expired', methods=['GET'])
+@jwt_required()
+def get_expired_events():
+    """Get count of expired events (admin only)"""
+    try:
+        user_id = get_jwt_identity()
+        user = user_model.get_user_by_id(user_id)
+        
+        if not user or user['role'] != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if AUTO_CLEANUP_AVAILABLE:
+            from auto_cleanup_events import auto_cleanup
+            expired_count = auto_cleanup.get_expired_events_count()
+            expired_events = auto_cleanup.list_expired_events()
+            
+            return jsonify({
+                'expired_count': expired_count,
+                'expired_events': [
+                    {
+                        'id': event['id'],
+                        'title': event['title'],
+                        'end_datetime': event['end_datetime'],
+                        'created_at': event['created_at']
+                    }
+                    for event in expired_events
+                ]
+            }), 200
+        else:
+            return jsonify({'error': 'Automatic cleanup system not available'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     print("🚀 Starting SQLite Calendar App...")
     
@@ -1081,23 +1223,34 @@ if __name__ == '__main__':
         print(f"⚠️ Migration warning: {str(e)}")
         print("💡 App will continue, but you may need to run migration manually")
     
-    # Automatic password persistence management
+    # Bulletproof user system management
+    if BULLETPROOF_SYSTEM_AVAILABLE:
+        try:
+            print("🔒 Bulletproof user system active - all users permanently preserved")
+            print("💪 Your login details will NEVER be lost again!")
+        except Exception as e:
+            print(f"⚠️ Bulletproof system warning: {str(e)}")
+    
+    # Legacy password persistence management (backup)
     if PASSWORD_PERSISTENCE_AVAILABLE:
         try:
-            print("🔐 Managing password persistence...")
-            
-            # Check if password backup exists
-            if os.path.exists('password_backup.json'):
-                print("📦 Password backup found - restoring passwords...")
-                password_persistence.restore_all_passwords()
-            else:
-                print("💾 Creating initial password backup...")
-                password_persistence.backup_all_passwords()
-            
-            print("✅ Password persistence management completed")
+            print("🔐 Legacy password persistence backup...")
+            password_persistence.backup_all_passwords()
+            print("✅ Legacy backup completed")
         except Exception as e:
-            print(f"⚠️ Password persistence warning: {str(e)}")
-            print("💡 App will continue, but password persistence may not work")
+            print(f"⚠️ Legacy backup warning: {str(e)}")
+    
+    # Automatic event cleanup system
+    if AUTO_CLEANUP_AVAILABLE:
+        try:
+            print("🗑️ Starting automatic event cleanup service...")
+            # Clean up any existing expired events first
+            cleanup_expired_events()
+            # Start the automatic cleanup service
+            start_auto_cleanup()
+            print("✅ Automatic event cleanup service started")
+        except Exception as e:
+            print(f"⚠️ Automatic cleanup warning: {str(e)}")
     
     print("📊 Features available:")
     print("   ✅ User signup (employee/admin)")

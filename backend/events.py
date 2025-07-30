@@ -89,7 +89,7 @@ class Event:
             
             formatted_events = []
             for event in events:
-                event_timezone = event.get('timezone', 'UTC')
+                event_timezone = event['timezone'] if 'timezone' in event.keys() else 'UTC'
                 
                 # Convert UTC times to local timezone
                 start_local = timezone_utils.convert_to_local_time(event['start_datetime'], event_timezone)

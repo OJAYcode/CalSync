@@ -1,0 +1,73 @@
+{
+  "created_at": "2025-07-29T15:49:39.667067",
+  "version": "1.0",
+  "description": "MASTER BACKUP - NEVER DELETE THIS FILE",
+  "users": [
+    {
+      "id": 1,
+      "email": "oluwoleoluwole82@gmail.com",
+      "password_hash": "74622fb35e864a9adc77e6f49c6cb2ac61a259b83f5ffd4c9ee2b3fc47c16fa7$508a453cc06d49d59be1540448ba0b1ade9a85bed31fe23077d9e15e7283e5a7",
+      "first_name": "Favour",
+      "last_name": "Ademola",
+      "role": "employee",
+      "is_active": 1,
+      "created_at": "2025-07-23 08:40:47",
+      "department": null
+    },
+    {
+      "id": 2,
+      "email": "justjay7220@gmail.com",
+      "password_hash": "4114230973993f7a166302c59665df07533c52497f757d2129bcfe6d69c560df$3f305b848d03c003a578c786e716d3a9e244e15f8f9139158ed8ee654bc4bfe0",
+      "first_name": "Oluwole",
+      "last_name": "Oluwole",
+      "role": "admin",
+      "is_active": 1,
+      "created_at": "2025-07-23 08:56:19",
+      "department": null
+    },
+    {
+      "id": 3,
+      "email": "test@example.com",
+      "password_hash": "3a9ddb441435f689a10c89077499d5ae22b5f2fad8360e762d0d960f3d89d97e$e3ef78479e0b73f4991f0796b998a9662254a0511a321551d67552588da2ee40",
+      "first_name": "Test",
+      "last_name": "User",
+      "role": "employee",
+      "is_active": 1,
+      "created_at": "2025-07-29 12:47:41",
+      "department": null
+    },
+    {
+      "id": 4,
+      "email": "backup@calsync.com",
+      "password_hash": "6dae8c2adfd8d58b2451ecf5ba9e96f7bc9a2221f8405e3bc1756be8068fbcce$642f9ce397bf9cace1198704037c5b562d132834d7dd64f8fc9b490de67a8ca5",
+      "first_name": "Backup",
+      "last_name": "Admin",
+      "role": "admin",
+      "is_active": 1,
+      "created_at": "2025-07-29 15:11:14.377848",
+      "department": null
+    },
+    {
+      "id": 5,
+      "email": "admin@calsync.com",
+      "password_hash": "f631b83f7d58f4c637454c9c630b6233ff7f783b8e2d2b0db15d389b66c99ed4$3ca85ea2c77cd06793e34c7375648a765a13ea2702c70a38d892430713d62abf",
+      "first_name": "Super",
+      "last_name": "Admin",
+      "role": "admin",
+      "is_active": 1,
+      "created_at": "2025-07-29 15:49:39.594260",
+      "department": null
+    },
+    {
+      "id": 6,
+      "email": "master@calsync.com",
+      "password_hash": "4e638f2ba54df94a94f0de72356c55d43aabdff3b322dffbabc6c2c49fc8d493$2dbf15d9ac98a09a2bcc4f94ee913a6cd7c72b6205e8dc7258e8f7bd5add4a12",
+      "first_name": "Master",
+      "last_name": "Admin",
+      "role": "admin",
+      "is_active": 1,
+      "created_at": "2025-07-29 15:49:39.635152",
+      "department": null
+    }
+  ]
+}

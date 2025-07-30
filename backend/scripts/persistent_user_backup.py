@@ -226,63 +226,72 @@ class PersistentUserBackup:
             print(f"❌ Failed to create default users: {str(e)}")
             return False
     
-    def reset_user_passwords(self):
-        """Reset all user passwords to known values for deployment"""
+    def preserve_user_passwords(self):
+        """Preserve user passwords by ensuring they're not overwritten"""
         try:
             if not os.path.exists(self.db_path):
-                print("❌ Database not found. Cannot reset passwords.")
+                print("❌ Database not found. Cannot preserve passwords.")
                 return False
             
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             # Get all users
-            cursor.execute('SELECT id, email, first_name, last_name, role FROM users')
+            cursor.execute('SELECT id, email, password_hash, first_name, last_name, role FROM users')
             users = cursor.fetchall()
             
             if not users:
-                print("❌ No users found to reset passwords.")
+                print("❌ No users found to preserve passwords.")
                 conn.close()
                 return False
             
-            print(f"🔄 Resetting passwords for {len(users)} users...")
+            print(f"🔒 Preserving passwords for {len(users)} users...")
             
-            # Define password mapping based on role
-            password_mapping = {
-                'admin': 'admin123',
-                'employee': 'password123'
-            }
-            
+            # Check if any users have empty or invalid password hashes
+            users_needing_password = []
             for user in users:
-                user_id, email, first_name, last_name, role = user
+                user_id, email, password_hash, first_name, last_name, role = user
                 
-                # Determine password based on role
-                password = password_mapping.get(role, 'password123')
+                # If password hash is empty or too short, mark for password assignment
+                if not password_hash or len(password_hash) < 10:
+                    users_needing_password.append(user)
+            
+            if users_needing_password:
+                print(f"⚠️ Found {len(users_needing_password)} users with missing passwords")
                 
-                # Hash the password
-                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                # Define password mapping based on role for users with missing passwords
+                password_mapping = {
+                    'admin': 'admin123',
+                    'employee': 'password123'
+                }
                 
-                # Update the user's password
-                cursor.execute('''
-                    UPDATE users 
-                    SET password_hash = ?, updated_at = CURRENT_TIMESTAMP 
-                    WHERE id = ?
-                ''', (password_hash, user_id))
-                
-                print(f"   ✅ {email} - Password: {password}")
+                for user in users_needing_password:
+                    user_id, email, password_hash, first_name, last_name, role = user
+                    
+                    # Determine password based on role
+                    password = password_mapping.get(role, 'password123')
+                    
+                    # Hash the password
+                    new_password_hash = hashlib.sha256(password.encode()).hexdigest()
+                    
+                    # Update the user's password
+                    cursor.execute('''
+                        UPDATE users 
+                        SET password_hash = ?, updated_at = CURRENT_TIMESTAMP 
+                        WHERE id = ?
+                    ''', (new_password_hash, user_id))
+                    
+                    print(f"   🔑 {email} - Assigned password: {password}")
+            else:
+                print("✅ All users have valid passwords - no changes needed")
             
             conn.commit()
             conn.close()
             
-            print("✅ User passwords reset successfully!")
-            print("📋 Login Credentials:")
-            print("   Admins: Use 'admin123' as password")
-            print("   Employees: Use 'password123' as password")
-            
             return True
             
         except Exception as e:
-            print(f"❌ Failed to reset passwords: {str(e)}")
+            print(f"❌ Failed to preserve passwords: {str(e)}")
             return False
     
     def backup_database(self):
@@ -326,14 +335,15 @@ def main():
     print("\n4️⃣ Ensuring default users exist...")
     backup_system.create_default_users()
     
-    # Reset passwords to known values for deployment
-    print("\n5️⃣ Resetting passwords for deployment...")
-    backup_system.reset_user_passwords()
+    # Preserve user passwords (only fix missing ones)
+    print("\n5️⃣ Preserving user passwords...")
+    backup_system.preserve_user_passwords()
     
     print("\n✅ Persistent user backup system completed!")
-    print("\n📋 Available login credentials:")
-    print("   Admins: Use 'admin123' as password")
-    print("   Employees: Use 'password123' as password")
+    print("\n📋 User Password Status:")
+    print("   ✅ Original signup passwords are preserved")
+    print("   ✅ Users can log in with their original credentials")
+    print("   ✅ Only users with missing passwords get default passwords")
 
 if __name__ == '__main__':
     main() 

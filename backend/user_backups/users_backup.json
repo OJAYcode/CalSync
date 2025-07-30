@@ -9,7 +9,7 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-23 08:40:47",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   },
   {
     "id": 2,
@@ -21,7 +21,7 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-23 08:56:19",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   },
   {
     "id": 3,
@@ -33,7 +33,7 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-29 12:47:41",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   },
   {
     "id": 4,
@@ -45,7 +45,7 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-29 15:11:14.377848",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   },
   {
     "id": 5,
@@ -57,7 +57,7 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-29 15:49:39.594260",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   },
   {
     "id": 6,
@@ -69,6 +69,6 @@
     "is_active": 1,
     "fcm_token": null,
     "created_at": "2025-07-29 15:49:39.635152",
-    "updated_at": "2025-07-30 15:23:12"
+    "updated_at": "2025-07-30 15:24:15"
   }
 ]

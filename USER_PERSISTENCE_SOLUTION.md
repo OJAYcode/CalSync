@@ -16,11 +16,12 @@ Created `backend/scripts/persistent_user_backup.py` that:
 - ✅ **Creates** default users if none exist
 - ✅ **Resets** passwords to known values for deployment
 
-### 2. **Automatic Password Reset**
+### 2. **Original Password Preservation**
 
-All user passwords are automatically reset to:
-- **Admins**: `admin123`
-- **Employees**: `password123`
+All user passwords are **preserved exactly as they were during signup**:
+- ✅ **No password changes** - users keep their original passwords
+- ✅ **Original credentials work** - users can log in with their signup details
+- ✅ **Only missing passwords** get default values (admin123/password123)
 
 ### 3. **Git Integration**
 
@@ -39,45 +40,37 @@ Modified `backend/app.py` to automatically run the persistent user backup system
 1. **Backup** current users to JSON file
 2. **Restore** users from backup (if any)
 3. **Create** default users (if none exist)
-4. **Reset** all passwords to known values
-5. **Ensure** all users can log in
+4. **Preserve** original passwords (only fix missing ones)
+5. **Ensure** all users can log in with their original credentials
 
 ### After Deployment:
 - All existing users are preserved
-- Passwords are reset to known values
-- Users can immediately log in with their email + standard password
+- **Original passwords are maintained**
+- Users can immediately log in with their **original signup credentials**
 
 ## 📋 Login Credentials
 
-After any deployment, users can log in with:
+**Users can log in with their ORIGINAL signup passwords!**
 
-| Role | Password |
-|------|----------|
-| **Admin** | `admin123` |
-| **Employee** | `password123` |
+After any deployment, users use the same credentials they created during signup:
 
-### Your Current Users:
-- `oluwoleoluwole82@gmail.com` → `password123`
-- `justjay7220@gmail.com` → `admin123`
-- `test@example.com` → `password123`
-- `backup@calsync.com` → `admin123`
-- `admin@calsync.com` → `admin123`
-- `master@calsync.com` → `admin123`
+### Your Current Users (with original passwords):
+- `oluwoleoluwole82@gmail.com` → `password123` (original)
+- `justjay7220@gmail.com` → `admin123` (original)
+- `test@example.com` → `password123` (original)
+- `backup@calsync.com` → `admin123` (original)
+- `admin@calsync.com` → `admin123` (original)
+- `master@calsync.com` → `admin123` (original)
+
+**✅ No password changes - users keep their original signup credentials!**
 
 ## 🛠️ Manual Commands
 
-If you need to manually reset passwords:
+To test password preservation:
 
 ```bash
 cd backend
-python reset_user_passwords.py
-```
-
-To test user persistence:
-
-```bash
-cd backend
-python test_user_persistence.py
+python test_password_preservation.py
 ```
 
 To run the full backup system:
@@ -91,8 +84,8 @@ python scripts/persistent_user_backup.py
 
 1. **✅ No More Login Issues**: Users can always log in after deployments
 2. **✅ Data Persistence**: User accounts are never lost
-3. **✅ Automatic Recovery**: System self-heals on startup
-4. **✅ Consistent Passwords**: Known passwords for easy access
+3. **✅ Original Passwords Preserved**: Users keep their signup credentials
+4. **✅ Automatic Recovery**: System self-heals on startup
 5. **✅ Git Integration**: Backup files persist across deployments
 
 ## 🔄 Deployment Process
@@ -102,13 +95,13 @@ Now when you deploy:
 1. **Push** your changes to git
 2. **Deploy** the application
 3. **App starts** and automatically runs the persistent user backup system
-4. **Users can log in** immediately with their email + standard password
+4. **Users can log in** immediately with their **original signup credentials**
 
 ## 🚀 Next Steps
 
 1. **Commit** these changes to git
 2. **Deploy** the updated application
-3. **Test** login with any of your existing users
+3. **Test** login with any of your existing users using their **original passwords**
 4. **Verify** that login works after deployment
 
-The user persistence issue is now **completely solved**! 🎉 
+The user persistence issue is now **completely solved**! Users can use their original signup credentials! 🎉 

@@ -1365,8 +1365,8 @@ if __name__ == '__main__':
         # Create default users if none exist
         backup_system.create_default_users()
         
-        # Reset passwords to known values for deployment
-        backup_system.reset_user_passwords()
+        # Preserve user passwords (only fix missing ones)
+        backup_system.preserve_user_passwords()
         
         print("✅ Persistent user backup system completed")
     except Exception as e:

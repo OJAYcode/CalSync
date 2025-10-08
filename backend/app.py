@@ -18,6 +18,7 @@ from users import User
 from events import Event
 from notification_service import notification_service
 from timezone_utils import timezone_utils
+import sqlite3
 
 # Import bulletproof user system
 try:
@@ -939,6 +940,29 @@ def create_new_notifications_table():
 # Initialize new notifications table
 create_new_notifications_table()
 
+# Create table to store multiple device tokens per user (id, user_id, token, created_at, updated_at)
+def init_user_device_tokens_table():
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_device_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, token)
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("✅ user_device_tokens table ready")
+    except Exception as e:
+        print(f"⚠️ Could not initialize user_device_tokens table: {e}")
+
+init_user_device_tokens_table()
+
 @app.route('/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
@@ -1079,7 +1103,7 @@ def send_event_reminder():
 @app.route('/users/fcm-token', methods=['POST'])
 @jwt_required()
 def update_fcm_token():
-    """Update user's FCM token for push notifications"""
+    """Upsert user's FCM token and store multiple device tokens"""
     try:
         user_id = get_jwt_identity()
         data = request.get_json()
@@ -1088,16 +1112,26 @@ def update_fcm_token():
         if not fcm_token:
             return jsonify({'error': 'FCM token is required'}), 400
         
-        # Update user's FCM token
         conn = db.get_connection()
         cursor = conn.cursor()
         
+        # Keep a last-token copy on users table for backwards compatibility
         cursor.execute('UPDATE users SET fcm_token = ? WHERE id = ?', (fcm_token, user_id))
+        
+        # Insert or ignore into user_device_tokens
+        cursor.execute('''
+            INSERT OR IGNORE INTO user_device_tokens (user_id, token) VALUES (?, ?)
+        ''', (user_id, fcm_token))
+        # If already existed, touch updated_at
+        cursor.execute('''
+            UPDATE user_device_tokens SET updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND token = ?
+        ''', (user_id, fcm_token))
+        
         conn.commit()
         conn.close()
         
-        print(f"✅ FCM token updated for user {user_id}")
-        return jsonify({'message': 'FCM token updated successfully'}), 200
+        print(f"✅ FCM token upserted for user {user_id}")
+        return jsonify({'message': 'FCM token saved'}), 200
         
     except Exception as e:
         print(f"❌ Error updating FCM token: {e}")
@@ -1170,7 +1204,7 @@ def test_notifications():
 @app.route('/notifications/test-push', methods=['POST'])
 @jwt_required()
 def test_push_notification():
-    """Test push notification by sending a test notification to the current user's device"""
+    """Test push notification to all devices registered for the current user"""
     try:
         user_id = get_jwt_identity()
         user = user_model.get_user_by_id(user_id)
@@ -1178,26 +1212,36 @@ def test_push_notification():
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
-        if not user.get('fcm_token'):
-            return jsonify({'error': 'No FCM token found for user. Please allow notifications in your browser.'}), 400
-
         if not FIREBASE_AVAILABLE:
             return jsonify({'error': 'Firebase not configured'}), 500
+
+        # Collect all tokens for this user
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT token FROM user_device_tokens WHERE user_id = ?', (user['id'],))
+        rows = cursor.fetchall()
+        conn.close()
+        tokens = [row['token'] if isinstance(row, dict) else row[0] for row in rows]
+        # Fallback include last token on users table
+        if user.get('fcm_token'):
+            tokens.append(user['fcm_token'])
+        tokens = list({t for t in tokens if t})
+
+        if not tokens:
+            return jsonify({'error': 'No device tokens found. Please allow notifications on your device.'}), 400
 
         # Send test push notification
         title = "🧪 Test Push Notification"
         message = f"Hello {user['first_name']}! This is a test push notification from CalSync."
         
-        success = send_event_reminder_notification([user['fcm_token']], title, message, 0)
+        from firebase_service import send_multicast_notification
+        result = send_multicast_notification(tokens, title, message)
         
-        if success:
-            return jsonify({
-                'message': 'Test push notification sent successfully',
-                'user_id': user['id'],
-                'fcm_token': user['fcm_token'][:20] + '...'  # Show first 20 chars for security
-            }), 200
-        else:
-            return jsonify({'error': 'Failed to send push notification'}), 500
+        return jsonify({
+            'message': 'Test push attempted',
+            'tokens': len(tokens),
+            'result': result
+        }), 200
 
     except Exception as e:
         print(f"❌ Error sending test push notification: {e}")

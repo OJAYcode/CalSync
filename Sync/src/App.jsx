@@ -20,6 +20,17 @@ import { Menu, X } from "lucide-react";
 import "./App.css";
 import { messaging, getToken, onMessage } from "./firebase";
 
+const API_URL = (() => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+    if (host === 'localhost' || isIp) return `http://${host}:5000`;
+  }
+  return 'https://calsync-production.up.railway.app';
+})();
+
 // Remove DarkModeContext, useDarkMode, and DarkModeToggle
 
 function App() {
@@ -57,7 +68,7 @@ function App() {
               // Send token to backend if user is logged in
               if (user) {
                 const token = localStorage.getItem('session_token');
-                fetch('https://calsync-production.up.railway.app/users/fcm-token', {
+                fetch(`${API_URL}/users/fcm-token`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

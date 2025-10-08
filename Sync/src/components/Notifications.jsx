@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from "react";
 import BackButton from "./BackButton";
 
-// API URL configuration - using Railway backend
-const API_URL = "https://calsync-production.up.railway.app";
+// Dynamic API base URL
+const API_URL = (() => {
+  const envUrl = import.meta.env?.VITE_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+    if (host === 'localhost' || isIp) return `http://${host}:5000`;
+  }
+  return 'https://calsync-production.up.railway.app';
+})();
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);

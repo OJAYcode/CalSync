@@ -2,10 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Mail, Lock, Users, Shield, Key } from "lucide-react";
 
-const ADMIN_CODE = "ADMIN2024"; // Change this to your secure admin code
+const ADMIN_CODE = "ADMIN2024"; 
 
-// API URL configuration - using Railway backend
-const API_URL = "https://calsync-production.up.railway.app";
+// API base URL: prefers VITE_API_URL, falls back to localhost in dev, Railway in prod
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://calsync-production.up.railway.app");
 
 const Signup = ({ setUser }) => {
   const [activeTab, setActiveTab] = useState("employee");
@@ -37,8 +41,11 @@ const Signup = ({ setUser }) => {
   useEffect(() => {
     fetch(`${API_URL}/departments`)
       .then(res => res.json())
-      .then(data => setDepartments(data))
-      .catch(() => setDepartments([]));
+      .then(data => setDepartments(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error("Failed to load departments", err);
+        setDepartments([]);
+      });
   }, []);
 
   // Employee form handlers

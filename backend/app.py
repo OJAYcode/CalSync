@@ -1222,6 +1222,17 @@ def test_push_notification():
         print(f"🔍 User lookup result: {user}")
 
         if not user:
+            # Let's check what users exist in the database
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT id, email, first_name, last_name FROM users LIMIT 5')
+                users = cursor.fetchall()
+                conn.close()
+                print(f"🔍 Available users in database: {users}")
+            except Exception as db_error:
+                print(f"❌ Error checking database: {db_error}")
+            
             return jsonify({'error': 'User not found'}), 404
 
         if not FIREBASE_AVAILABLE:

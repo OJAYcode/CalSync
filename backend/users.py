@@ -116,6 +116,7 @@ class User:
     def get_user_by_id(self, user_id):
         """Get user by ID"""
         try:
+            print(f"🔍 get_user_by_id called with user_id: {user_id} (type: {type(user_id)})")
             conn = db.get_connection()
             cursor = conn.cursor()
             
@@ -125,10 +126,11 @@ class User:
             ''', (user_id,))
             
             user = cursor.fetchone()
+            print(f"🔍 Raw user from DB: {user}")
             conn.close()
             
             if user:
-                return {
+                result = {
                     "id": user['id'],
                     "email": user['email'],
                     "first_name": user['first_name'],

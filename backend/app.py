@@ -1229,7 +1229,9 @@ def test_push_notification():
                 cursor.execute('SELECT id, email, first_name, last_name FROM users LIMIT 5')
                 users = cursor.fetchall()
                 conn.close()
-                print(f"🔍 Available users in database: {users}")
+                print(f"🔍 Available users in database:")
+                for user in users:
+                    print(f"   ID: {user['id']}, Email: {user['email']}, Name: {user['first_name']} {user['last_name']}")
             except Exception as db_error:
                 print(f"❌ Error checking database: {db_error}")
             

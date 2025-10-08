@@ -1207,7 +1207,19 @@ def test_push_notification():
     """Test push notification to all devices registered for the current user"""
     try:
         user_id = get_jwt_identity()
+        print(f"🔍 JWT user_id: {user_id} (type: {type(user_id)})")
+        
+        # Convert user_id to int if it's a string
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+                print(f"✅ Converted user_id to int: {user_id}")
+            except ValueError:
+                print(f"❌ Failed to convert user_id to int: {user_id}")
+                return jsonify({'error': 'Invalid user ID format'}), 400
+        
         user = user_model.get_user_by_id(user_id)
+        print(f"🔍 User lookup result: {user}")
 
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -1221,11 +1233,22 @@ def test_push_notification():
         cursor.execute('SELECT token FROM user_device_tokens WHERE user_id = ?', (user['id'],))
         rows = cursor.fetchall()
         conn.close()
-        tokens = [row['token'] if isinstance(row, dict) else row[0] for row in rows]
+        
+        # Convert rows to token list
+        tokens = []
+        for row in rows:
+            if isinstance(row, dict):
+                tokens.append(row['token'])
+            else:
+                tokens.append(row[0])
+        
         # Fallback include last token on users table
         if user.get('fcm_token'):
             tokens.append(user['fcm_token'])
+        
+        # Remove duplicates and empty tokens
         tokens = list({t for t in tokens if t})
+        print(f"🔍 Found {len(tokens)} device tokens for user {user['id']}")
 
         if not tokens:
             return jsonify({'error': 'No device tokens found. Please allow notifications on your device.'}), 400

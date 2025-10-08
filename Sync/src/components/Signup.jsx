@@ -4,12 +4,20 @@ import { User, Mail, Lock, Users, Shield, Key } from "lucide-react";
 
 const ADMIN_CODE = "ADMIN2024"; 
 
-// API base URL: prefers VITE_API_URL, falls back to localhost in dev, Railway in prod
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:5000"
-    : "https://calsync-production.up.railway.app");
+// API base URL: prefers VITE_API_URL, else use current host with :5000 in dev/LAN, else Railway
+const API_URL = (() => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    // If accessing from phone on LAN (host is an IP) or localhost, point to same host on port 5000
+    const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+    if (host === "localhost" || isIp) {
+      return `http://${host}:5000`;
+    }
+  }
+  return "https://calsync-production.up.railway.app";
+})();
 
 const Signup = ({ setUser }) => {
   const [activeTab, setActiveTab] = useState("employee");

@@ -1422,9 +1422,9 @@ if __name__ == '__main__':
     print("   POST /auth/change-password - Change password")
     print("   GET  /users         - Get all users (admin only)")
     print()
-    print("🌐 Frontend should connect to: http://localhost:5000")
+    print("🌐 Frontend should connect to: http://<your-computer-ip>:5000")
     
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', debug=True, port=5000)
 
 # Add startup message for Railway (moved to safer location)
 def print_startup_info():

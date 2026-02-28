@@ -1,0 +1,10 @@
+{
+  "name": "CalSync",
+  "short_name": "CalSync",
+  "description": "Organizational calendar synchronization with multi-user support",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": []
+}

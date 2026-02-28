@@ -1,10 +1,29 @@
+# Old projects — removed from repo
+backend/
+Sync/
+
+# Old docs, scripts, test files, databases
+*.md
+!Sync-NextJS/README.md
+*.db
+*.key
+*.json
+!Sync-NextJS/package.json
+!Sync-NextJS/tsconfig.json
+!.gitignore
+start-servers.bat
+FRONTEND_DIAGNOSTIC.js
+TOKEN_DEBUG.js
+test_*.js
+test_*.bat
+find_superadmin.js
+BACKEND_IMPLEMENTATION_PROMPT.md
+users_master.json
+.venv/
+
 # Firebase credentials (sensitive)
 backend/firebase-service-account.json
 
-# Database backups (keep user backups in git for persistence)
+# Database backups
 backend/calendar_app.db.backup_*
 backend/*.db.backup_*
-
-# Keep user backup files in git for persistence across deployments
-!backend/user_backups/
-!backend/user_backups/users_backup.json 

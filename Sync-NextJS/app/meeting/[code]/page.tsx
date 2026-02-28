@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { meetingService } from "@/lib/services";
 import {
-  connectSocket,
-  disconnectSocket,
   getSocket,
+  ensureConnected,
+  destroySocket,
   MeetingEvents,
 } from "@/lib/socket";
 import { useAuth } from "@/lib/auth-context";
@@ -138,7 +138,7 @@ export default function MeetingRoomPage() {
       // ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const socket = connectSocket();
+          const socket = getSocket();
           socket.emit(MeetingEvents.ICE_CANDIDATE, {
             meeting_code: code,
             target_peer_id: peerId,
@@ -177,63 +177,23 @@ export default function MeetingRoomPage() {
   const setupSocket = useCallback(() => {
     const socket = getSocket();
 
-    // Existing participants already in the room
-    socket.on(
-      MeetingEvents.EXISTING_PARTICIPANTS,
-      (data: {
-        participants: Array<{
-          peer_id: string;
-          user_id: string;
-          display_name: string;
-        }>;
-      }) => {
-        console.log("[Meeting] Existing participants:", data.participants);
-        data.participants.forEach((p) => {
-          setParticipants((prev) => {
-            const next = new Map(prev);
-            next.set(p.peer_id, {
-              id: p.user_id || p.peer_id,
-              peer_id: p.peer_id,
-              name: p.display_name || "Participant",
-              audioEnabled: true,
-              videoEnabled: true,
-              isScreenSharing: false,
-            });
-            return next;
-          });
+    // ── Meeting event handlers ──
 
-          // Create WebRTC peer connection for each existing participant
-          const pc = createPeerConnection(p.peer_id);
-          pc.createOffer()
-            .then((offer) => pc.setLocalDescription(offer).then(() => offer))
-            .then((offer) => {
-              console.log("[WebRTC] Sending offer to:", p.peer_id);
-              socket.emit(MeetingEvents.OFFER, {
-                meeting_code: code,
-                target_peer_id: p.peer_id,
-                offer,
-              });
-            })
-            .catch((err) => console.error("[WebRTC] Offer error:", err));
-        });
-      },
-    );
-
-    // New participant joined
-    socket.on(
-      MeetingEvents.USER_JOINED,
-      async (data: {
+    const onExistingParticipants = (data: {
+      participants: Array<{
         peer_id: string;
         user_id: string;
         display_name: string;
-      }) => {
-        console.log("[Meeting] User joined:", data.display_name, data.peer_id);
+      }>;
+    }) => {
+      console.log("[Meeting] Existing participants:", data.participants);
+      data.participants.forEach((p) => {
         setParticipants((prev) => {
           const next = new Map(prev);
-          next.set(data.peer_id, {
-            id: data.user_id || data.peer_id,
-            peer_id: data.peer_id,
-            name: data.display_name || "Participant",
+          next.set(p.peer_id, {
+            id: p.user_id || p.peer_id,
+            peer_id: p.peer_id,
+            name: p.display_name || "Participant",
             audioEnabled: true,
             videoEnabled: true,
             isScreenSharing: false,
@@ -241,21 +201,54 @@ export default function MeetingRoomPage() {
           return next;
         });
 
-        // Create offer for new participant
-        const pc = createPeerConnection(data.peer_id);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        console.log("[WebRTC] Sending offer to:", data.peer_id);
-        socket.emit(MeetingEvents.OFFER, {
-          meeting_code: code,
-          target_peer_id: data.peer_id,
-          offer,
-        });
-      },
-    );
+        // Create WebRTC peer connection for each existing participant
+        const pc = createPeerConnection(p.peer_id);
+        pc.createOffer()
+          .then((offer) => pc.setLocalDescription(offer).then(() => offer))
+          .then((offer) => {
+            console.log("[WebRTC] Sending offer to:", p.peer_id);
+            socket.emit(MeetingEvents.OFFER, {
+              meeting_code: code,
+              target_peer_id: p.peer_id,
+              offer,
+            });
+          })
+          .catch((err) => console.error("[WebRTC] Offer error:", err));
+      });
+    };
 
-    // Participant left
-    socket.on(MeetingEvents.USER_LEFT, (data: { peer_id: string }) => {
+    const onUserJoined = async (data: {
+      peer_id: string;
+      user_id: string;
+      display_name: string;
+    }) => {
+      console.log("[Meeting] User joined:", data.display_name, data.peer_id);
+      setParticipants((prev) => {
+        const next = new Map(prev);
+        next.set(data.peer_id, {
+          id: data.user_id || data.peer_id,
+          peer_id: data.peer_id,
+          name: data.display_name || "Participant",
+          audioEnabled: true,
+          videoEnabled: true,
+          isScreenSharing: false,
+        });
+        return next;
+      });
+
+      // Create offer for new participant
+      const pc = createPeerConnection(data.peer_id);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      console.log("[WebRTC] Sending offer to:", data.peer_id);
+      socket.emit(MeetingEvents.OFFER, {
+        meeting_code: code,
+        target_peer_id: data.peer_id,
+        offer,
+      });
+    };
+
+    const onUserLeft = (data: { peer_id: string }) => {
       console.log("[Meeting] User left:", data.peer_id);
       setParticipants((prev) => {
         const next = new Map(prev);
@@ -264,103 +257,104 @@ export default function MeetingRoomPage() {
       });
       peerConnections.current.get(data.peer_id)?.close();
       peerConnections.current.delete(data.peer_id);
-    });
+    };
 
-    // Receive WebRTC offer
-    socket.on(
-      MeetingEvents.OFFER,
-      async (data: {
-        sender_peer_id: string;
-        offer: RTCSessionDescriptionInit;
-      }) => {
-        console.log("[WebRTC] Received offer from:", data.sender_peer_id);
-        const pc = createPeerConnection(data.sender_peer_id);
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit(MeetingEvents.ANSWER, {
-          meeting_code: code,
-          target_peer_id: data.sender_peer_id,
-          answer,
-        });
-      },
-    );
+    const onOffer = async (data: {
+      sender_peer_id: string;
+      offer: RTCSessionDescriptionInit;
+    }) => {
+      console.log("[WebRTC] Received offer from:", data.sender_peer_id);
+      const pc = createPeerConnection(data.sender_peer_id);
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit(MeetingEvents.ANSWER, {
+        meeting_code: code,
+        target_peer_id: data.sender_peer_id,
+        answer,
+      });
+    };
 
-    // Receive WebRTC answer
-    socket.on(
-      MeetingEvents.ANSWER,
-      async (data: {
-        sender_peer_id: string;
-        answer: RTCSessionDescriptionInit;
-      }) => {
-        console.log("[WebRTC] Received answer from:", data.sender_peer_id);
-        const pc = peerConnections.current.get(data.sender_peer_id);
-        if (pc) {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
-      },
-    );
+    const onAnswer = async (data: {
+      sender_peer_id: string;
+      answer: RTCSessionDescriptionInit;
+    }) => {
+      console.log("[WebRTC] Received answer from:", data.sender_peer_id);
+      const pc = peerConnections.current.get(data.sender_peer_id);
+      if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
+    };
 
-    // ICE candidate
-    socket.on(
-      MeetingEvents.ICE_CANDIDATE,
-      async (data: {
-        sender_peer_id: string;
-        candidate: RTCIceCandidateInit;
-      }) => {
-        console.log(
-          "[WebRTC] Received ICE candidate from:",
-          data.sender_peer_id,
-        );
-        const pc = peerConnections.current.get(data.sender_peer_id);
-        if (pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      },
-    );
+    const onIceCandidate = async (data: {
+      sender_peer_id: string;
+      candidate: RTCIceCandidateInit;
+    }) => {
+      console.log("[WebRTC] Received ICE candidate from:", data.sender_peer_id);
+      const pc = peerConnections.current.get(data.sender_peer_id);
+      if (pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      }
+    };
 
-    // Chat
-    socket.on(MeetingEvents.CHAT_MESSAGE, (msg: ChatMessage) => {
+    const onChatMessage = (msg: ChatMessage) => {
       setChatMessages((prev) => [...prev, msg]);
-    });
+    };
 
-    // Audio/Video toggles from others
-    socket.on(
-      MeetingEvents.TOGGLE_AUDIO,
-      (data: { peer_id: string; enabled: boolean }) => {
-        setParticipants((prev) => {
-          const next = new Map(prev);
-          const p = next.get(data.peer_id);
-          if (p) next.set(data.peer_id, { ...p, audioEnabled: data.enabled });
-          return next;
-        });
-      },
-    );
+    const onToggleAudio = (data: { peer_id: string; enabled: boolean }) => {
+      setParticipants((prev) => {
+        const next = new Map(prev);
+        const p = next.get(data.peer_id);
+        if (p) next.set(data.peer_id, { ...p, audioEnabled: data.enabled });
+        return next;
+      });
+    };
 
-    socket.on(
-      MeetingEvents.TOGGLE_VIDEO,
-      (data: { peer_id: string; enabled: boolean }) => {
-        setParticipants((prev) => {
-          const next = new Map(prev);
-          const p = next.get(data.peer_id);
-          if (p) next.set(data.peer_id, { ...p, videoEnabled: data.enabled });
-          return next;
-        });
-      },
-    );
+    const onToggleVideo = (data: { peer_id: string; enabled: boolean }) => {
+      setParticipants((prev) => {
+        const next = new Map(prev);
+        const p = next.get(data.peer_id);
+        if (p) next.set(data.peer_id, { ...p, videoEnabled: data.enabled });
+        return next;
+      });
+    };
 
-    // Reactions
-    socket.on(MeetingEvents.REACTION, (data: { emoji: string }) => {
+    const onReaction = (data: { emoji: string }) => {
       showFloatingReaction(data.emoji);
-    });
+    };
 
-    // Meeting ended
-    socket.on(MeetingEvents.MEETING_ENDED, () => {
+    const onMeetingEnded = () => {
       cleanup();
       router.push("/meetings");
-    });
+    };
 
-    return socket;
+    // ── Attach all listeners ──
+    socket.on(MeetingEvents.EXISTING_PARTICIPANTS, onExistingParticipants);
+    socket.on(MeetingEvents.USER_JOINED, onUserJoined);
+    socket.on(MeetingEvents.USER_LEFT, onUserLeft);
+    socket.on(MeetingEvents.OFFER, onOffer);
+    socket.on(MeetingEvents.ANSWER, onAnswer);
+    socket.on(MeetingEvents.ICE_CANDIDATE, onIceCandidate);
+    socket.on(MeetingEvents.CHAT_MESSAGE, onChatMessage);
+    socket.on(MeetingEvents.TOGGLE_AUDIO, onToggleAudio);
+    socket.on(MeetingEvents.TOGGLE_VIDEO, onToggleVideo);
+    socket.on(MeetingEvents.REACTION, onReaction);
+    socket.on(MeetingEvents.MEETING_ENDED, onMeetingEnded);
+
+    // Return teardown function that removes ONLY our listeners
+    return () => {
+      socket.off(MeetingEvents.EXISTING_PARTICIPANTS, onExistingParticipants);
+      socket.off(MeetingEvents.USER_JOINED, onUserJoined);
+      socket.off(MeetingEvents.USER_LEFT, onUserLeft);
+      socket.off(MeetingEvents.OFFER, onOffer);
+      socket.off(MeetingEvents.ANSWER, onAnswer);
+      socket.off(MeetingEvents.ICE_CANDIDATE, onIceCandidate);
+      socket.off(MeetingEvents.CHAT_MESSAGE, onChatMessage);
+      socket.off(MeetingEvents.TOGGLE_AUDIO, onToggleAudio);
+      socket.off(MeetingEvents.TOGGLE_VIDEO, onToggleVideo);
+      socket.off(MeetingEvents.REACTION, onReaction);
+      socket.off(MeetingEvents.MEETING_ENDED, onMeetingEnded);
+    };
   }, [code, createPeerConnection, router]);
 
   // ─── Bind local stream to video element after join renders it ───
@@ -369,6 +363,9 @@ export default function MeetingRoomPage() {
       localVideoRef.current.srcObject = localStreamRef.current;
     }
   }, [joined]);
+
+  // ─── Ref to hold the teardown function from setupSocket ───
+  const teardownRef = useRef<(() => void) | null>(null);
 
   // ─── Join the meeting ───
   async function joinMeeting() {
@@ -383,14 +380,27 @@ export default function MeetingRoomPage() {
       });
       localStreamRef.current = stream;
 
-      // Ensure any previous socket is fully cleaned up
-      disconnectSocket();
+      // Get the shared socket and attach meeting listeners FIRST
+      const socket = getSocket();
 
-      // Set up all meeting event listeners BEFORE connecting
-      const socket = setupSocket();
+      // Remove any stale meeting listeners from a previous join
+      if (teardownRef.current) {
+        teardownRef.current();
+        teardownRef.current = null;
+      }
 
+      // Attach all meeting event listeners
+      const teardown = setupSocket();
+      teardownRef.current = teardown;
+
+      // Function to emit join-meeting
       const emitJoin = () => {
-        console.log("[Meeting] Emitting join-meeting with peer_id:", myPeerId);
+        console.log("[Meeting] Emitting join-meeting:", {
+          meeting_code: code,
+          peer_id: myPeerId,
+          user_id: user?.id,
+          display_name: user?.full_name || user?.first_name || "User",
+        });
         socket.emit(MeetingEvents.JOIN, {
           meeting_code: code,
           peer_id: myPeerId,
@@ -399,28 +409,46 @@ export default function MeetingRoomPage() {
         });
       };
 
-      // Listen for connection events
-      socket.on("connect", () => {
+      // Track connection state
+      const onConnect = () => {
         console.log("[Meeting] Socket connected, id:", socket.id);
         setIsConnected(true);
-        // Join meeting room AFTER socket is connected
+        // Emit join-meeting whenever we (re)connect
         emitJoin();
-      });
+      };
 
-      socket.on("disconnect", (reason) => {
-        console.log("[Meeting] Socket disconnected, reason:", reason);
+      const onDisconnect = (reason: string) => {
+        console.warn("[Meeting] Socket disconnected:", reason);
         setIsConnected(false);
-      });
+      };
 
-      socket.on("connect_error", (err) => {
-        console.error("[Meeting] Socket connection error:", err.message);
+      const onConnectError = (err: Error) => {
+        console.error("[Meeting] Connection error:", err.message);
         setIsConnected(false);
-      });
+      };
 
-      // Now connect — listeners are already in place
-      const token = localStorage.getItem("session_token");
-      socket.auth = { token };
-      socket.connect();
+      socket.on("connect", onConnect);
+      socket.on("disconnect", onDisconnect);
+      socket.on("connect_error", onConnectError);
+
+      // Store these for cleanup too
+      const prevTeardown = teardownRef.current;
+      teardownRef.current = () => {
+        prevTeardown?.();
+        socket.off("connect", onConnect);
+        socket.off("disconnect", onDisconnect);
+        socket.off("connect_error", onConnectError);
+      };
+
+      // Now connect (or if already connected, just emit join)
+      if (socket.connected) {
+        console.log("[Meeting] Socket already connected, joining immediately");
+        setIsConnected(true);
+        emitJoin();
+      } else {
+        console.log("[Meeting] Connecting socket...");
+        ensureConnected();
+      }
 
       joinedRef.current = true;
       setJoined(true);
@@ -442,7 +470,7 @@ export default function MeetingRoomPage() {
       if (track) {
         track.enabled = !track.enabled;
         setAudioEnabled(track.enabled);
-        const socket = connectSocket();
+        const socket = getSocket();
         socket.emit(MeetingEvents.TOGGLE_AUDIO, {
           meeting_code: code,
           enabled: track.enabled,
@@ -458,7 +486,7 @@ export default function MeetingRoomPage() {
       if (track) {
         track.enabled = !track.enabled;
         setVideoEnabled(track.enabled);
-        const socket = connectSocket();
+        const socket = getSocket();
         socket.emit(MeetingEvents.TOGGLE_VIDEO, {
           meeting_code: code,
           enabled: track.enabled,
@@ -469,7 +497,7 @@ export default function MeetingRoomPage() {
 
   // ─── Screen sharing ───
   async function toggleScreenShare() {
-    const socket = connectSocket();
+    const socket = getSocket();
     if (isScreenSharing) {
       // Stop screen share
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -524,7 +552,7 @@ export default function MeetingRoomPage() {
   // ─── Send chat ───
   function sendChat() {
     if (!chatInput.trim()) return;
-    const socket = connectSocket();
+    const socket = getSocket();
     socket.emit(MeetingEvents.CHAT_MESSAGE, {
       meeting_code: code,
       message: chatInput.trim(),
@@ -545,7 +573,7 @@ export default function MeetingRoomPage() {
 
   // ─── Reactions ───
   function sendReaction(emoji: string) {
-    const socket = connectSocket();
+    const socket = getSocket();
     socket.emit(MeetingEvents.REACTION, { meeting_code: code, emoji });
     showFloatingReaction(emoji);
   }
@@ -559,23 +587,35 @@ export default function MeetingRoomPage() {
   }
 
   // ─── Leave / Cleanup ───
-  function cleanup(shouldDisconnectSocket = true) {
-    // Emit leave if socket is currently connected
+  function cleanup(shouldDestroy = false) {
+    // Emit leave if socket is connected
     try {
       const s = getSocket();
-      if (s.connected) {
+      if (s?.connected) {
         s.emit(MeetingEvents.LEAVE, {
           meeting_code: code,
           peer_id: myPeerId,
         });
       }
     } catch {}
+
+    // Remove meeting-specific listeners
+    if (teardownRef.current) {
+      teardownRef.current();
+      teardownRef.current = null;
+    }
+
+    // Stop media tracks
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+    // Close peer connections
     peerConnections.current.forEach((pc) => pc.close());
     peerConnections.current.clear();
-    if (shouldDisconnectSocket) {
-      disconnectSocket();
+
+    // Only destroy the socket instance when truly leaving
+    if (shouldDestroy) {
+      destroySocket();
     }
   }
 
@@ -913,6 +953,162 @@ export default function MeetingRoomPage() {
           }
         }
       `}</style>
+
+      {/* Debug Panel — REMOVE AFTER DEBUGGING */}
+      <DebugPanel
+        meetingCode={code}
+        peerId={myPeerId}
+        isConnected={isConnected}
+      />
+    </div>
+  );
+}
+
+// ─── Debug Panel (temporary) ───
+function DebugPanel({
+  meetingCode,
+  peerId,
+  isConnected,
+}: {
+  meetingCode: string;
+  peerId: string;
+  isConnected: boolean;
+}) {
+  const [debugData, setDebugData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [socketId, setSocketId] = useState<string | undefined>();
+
+  // Update socket ID whenever connection state changes
+  useEffect(() => {
+    try {
+      const s = getSocket();
+      setSocketId(s?.id);
+    } catch {}
+  }, [isConnected]);
+
+  const fetchDebugInfo = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `https://calsync-backend-nmxe.onrender.com/meetings/${meetingCode}/debug/active-peers`,
+      );
+      const data = await res.json();
+      setDebugData(data);
+      console.log("[Debug] Active peers:", data);
+    } catch (err) {
+      console.error("[Debug] Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-refresh every 3 seconds when enabled
+  useEffect(() => {
+    if (!open || !autoRefresh) return;
+    fetchDebugInfo();
+    const interval = setInterval(fetchDebugInfo, 3000);
+    return () => clearInterval(interval);
+  }, [open, autoRefresh, meetingCode]);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => {
+          setOpen(true);
+          fetchDebugInfo();
+        }}
+        className="fixed bottom-4 right-4 z-[9999] bg-gray-800 text-green-400 text-xs font-mono px-3 py-2 rounded-lg border border-green-500/30 hover:bg-gray-700"
+      >
+        🔍 Debug
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[9999] bg-gray-900 text-green-400 font-mono text-xs rounded-xl border border-green-500/30 shadow-2xl p-4 max-w-sm w-80 max-h-[70vh] overflow-y-auto">
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-bold text-sm">🔍 Debug Panel</span>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-gray-500 hover:text-white text-lg leading-none"
+        >
+          &times;
+        </button>
+      </div>
+
+      <div className="space-y-1 mb-3 text-[11px]">
+        <div>
+          Socket:{" "}
+          {isConnected ? "🟢 " + (socketId || "connected") : "🔴 disconnected"}
+        </div>
+        <div>
+          My Peer: <span className="text-white">{peerId}</span>
+        </div>
+        <div>
+          Meeting: <span className="text-white">{meetingCode}</span>
+        </div>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={fetchDebugInfo}
+          disabled={loading}
+          className="flex-1 bg-green-500 text-black font-bold text-xs py-1.5 rounded-md hover:bg-green-400 disabled:opacity-50"
+        >
+          {loading ? "..." : "Refresh"}
+        </button>
+        <button
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          className={`px-3 py-1.5 text-xs rounded-md font-bold ${autoRefresh ? "bg-yellow-500 text-black" : "bg-gray-700 text-gray-300"}`}
+        >
+          {autoRefresh ? "Auto ●" : "Auto ○"}
+        </button>
+      </div>
+
+      {debugData && (
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span>Active Peers:</span>
+            <span
+              className={`font-bold ${debugData.active_peer_count > 0 ? "text-green-300" : "text-red-400"}`}
+            >
+              {debugData.active_peer_count}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Total Meetings:</span>
+            <span className="text-white">
+              {debugData.total_meetings_with_peers}
+            </span>
+          </div>
+          {debugData.peers?.length > 0 ? (
+            <div className="mt-2 space-y-1.5">
+              {debugData.peers.map((p: any) => (
+                <div
+                  key={p.peer_id}
+                  className={`rounded-md p-2 ${p.peer_id === peerId ? "bg-blue-900/50 border border-blue-500/30" : "bg-gray-800"}`}
+                >
+                  <div className="text-white">
+                    👤 {p.display_name} {p.peer_id === peerId ? "(you)" : ""}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    peer: {p.peer_id}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    socket: {p.socket_id}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-yellow-400 text-[11px]">
+              No peers found — backend may not have received join-meeting event
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

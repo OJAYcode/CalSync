@@ -4,62 +4,92 @@ const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ||
   "https://calsync-backend-nmxe.onrender.com";
 
+// ────────────────────────────────────────────────────────────────────
+// Single socket instance — created once, reused everywhere.
+// autoConnect: false so we can attach listeners before connecting.
+// The meeting page calls socket.connect() after setting up handlers.
+// ────────────────────────────────────────────────────────────────────
 let socket: Socket | null = null;
 
+/** Get (or create) the shared Socket.IO instance. */
 export function getSocket(): Socket {
+  if (typeof window === "undefined") {
+    // SSR guard — return a no-op stub that will never be used
+    return null as unknown as Socket;
+  }
+
   if (!socket) {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("session_token")
-        : null;
+    const token = localStorage.getItem("session_token");
 
     socket = io(SOCKET_URL, {
-      autoConnect: false,
-      auth: { token },
-      // CRITICAL: polling first, then upgrade to websocket (required for Render)
+      autoConnect: false, // we connect manually after attaching listeners
+      path: "/socket.io/", // explicit default path
       transports: ["polling", "websocket"],
-      // Increased timeout for Render cold starts
-      timeout: 30000,
-      // Reconnection settings
-      reconnection: true,
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      // CRITICAL: forceNew to avoid stale manager/SID reuse
-      forceNew: true,
       upgrade: true,
       rememberUpgrade: false,
+      timeout: 20000,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      forceNew: false, // reuse the Manager so SIDs stay consistent
+      withCredentials: false,
+      auth: token ? { token } : {},
     });
 
-    // Base logging — attached once per instance
-    socket.on("connect", () => {
-      console.log("[Socket] Connected:", socket!.id);
-      console.log("[Socket] Transport:", socket!.io.engine?.transport?.name);
+    // ── Global logging (attached once) ──
+    socket.onAny((event, ...args) => {
+      console.log(`[Socket ↓] ${event}`, JSON.stringify(args).slice(0, 300));
     });
-    socket.on("connect_error", (err) =>
-      console.error("[Socket] Connect error:", err.message),
-    );
-    socket.on("disconnect", (reason) =>
-      console.log("[Socket] Disconnected:", reason),
-    );
+
+    socket.onAnyOutgoing((event, ...args) => {
+      console.log(`[Socket ↑] ${event}`, JSON.stringify(args).slice(0, 300));
+    });
+
+    socket.on("connect", () => {
+      console.log(
+        "[Socket] ✅ Connected | id:",
+        socket!.id,
+        "| transport:",
+        socket!.io.engine?.transport?.name,
+      );
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[Socket] ❌ Connect error:", err.message);
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.warn("[Socket] ⚠️ Disconnected:", reason);
+    });
   }
+
   return socket;
 }
 
-export function connectSocket(): Socket {
+/**
+ * Ensure the socket is connected (idempotent).
+ * Refreshes the auth token before connecting in case user re-logged in.
+ */
+export function ensureConnected(): Socket {
   const s = getSocket();
-  if (!s.connected && !s.active) {
-    // Update auth token before connecting
+  if (!s.connected) {
     const token = localStorage.getItem("session_token");
-    s.auth = { token };
+    s.auth = token ? { token } : {};
     s.connect();
   }
   return s;
 }
 
-export function disconnectSocket() {
+/**
+ * Clean disconnect — removes all listeners and destroys the instance.
+ * Call this only when the user is truly leaving the meeting / logging out.
+ */
+export function destroySocket(): void {
   if (socket) {
     socket.removeAllListeners();
+    socket.offAny();
+    socket.offAnyOutgoing();
     if (socket.connected) {
       socket.disconnect();
     }
@@ -67,7 +97,9 @@ export function disconnectSocket() {
   }
 }
 
-// Meeting-specific socket events — must match backend event names exactly
+// ────────────────────────────────────────────────────────────────────
+// Meeting-specific event names — must match backend exactly
+// ────────────────────────────────────────────────────────────────────
 export const MeetingEvents = {
   JOIN: "join-meeting",
   LEAVE: "leave-meeting",

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Full bleed background for maskable -->
+  <rect width="512" height="512" fill="#2563eb"/>
+  <!-- Safe zone content (80% of 512 = ~205px padding each side, center is 256x256) -->
+  <rect x="76" y="108" width="360" height="320" rx="24" fill="white"/>
+  <rect x="76" y="108" width="360" height="90" rx="24" fill="#1d4ed8"/>
+  <rect x="76" y="166" width="360" height="32" fill="#1d4ed8"/>
+  <rect x="148" y="68" width="36" height="90" rx="18" fill="white"/>
+  <rect x="328" y="68" width="36" height="90" rx="18" fill="white"/>
+  <rect x="116" y="252" width="56" height="52" rx="8" fill="#bfdbfe"/>
+  <rect x="228" y="252" width="56" height="52" rx="8" fill="#2563eb"/>
+  <rect x="340" y="252" width="56" height="52" rx="8" fill="#bfdbfe"/>
+  <rect x="116" y="324" width="56" height="52" rx="8" fill="#bfdbfe"/>
+  <rect x="228" y="324" width="56" height="52" rx="8" fill="#bfdbfe"/>
+  <rect x="340" y="324" width="56" height="52" rx="8" fill="#dbeafe"/>
+</svg>

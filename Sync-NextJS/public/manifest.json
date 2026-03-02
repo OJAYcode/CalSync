@@ -2,9 +2,64 @@
   "name": "CalSync",
   "short_name": "CalSync",
   "description": "Organizational calendar synchronization with multi-user support",
-  "start_url": "/",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
-  "icons": []
+  "categories": ["productivity", "utilities"],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-wide.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "CalSync Dashboard"
+    },
+    {
+      "src": "/icons/screenshot-narrow.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "CalSync Mobile"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Calendar",
+      "short_name": "Calendar",
+      "description": "View your calendar",
+      "url": "/calendar",
+      "icons": [
+        { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
+    },
+    {
+      "name": "New Event",
+      "short_name": "New Event",
+      "description": "Create a new event",
+      "url": "/events/new",
+      "icons": [
+        { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+      ]
+    }
+  ]
 }

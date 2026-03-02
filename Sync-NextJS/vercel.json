@@ -6,6 +6,26 @@
       "use": "@vercel/next"
     }
   ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Content-Type", "value": "application/javascript" },
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    }
+  ],
   "env": {
     "NEXT_PUBLIC_API_URL": "https://calsync-backend-nmxe.onrender.com",
     "NEXT_PUBLIC_SOCKET_URL": "https://calsync-backend-nmxe.onrender.com"

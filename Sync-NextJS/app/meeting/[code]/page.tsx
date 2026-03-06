@@ -174,8 +174,9 @@ export default function MeetingRoomPage() {
   );
 
   // ─── Socket setup (listeners only, does NOT connect) ───
-  const setupSocket = useCallback(() => {
-    const socket = getSocket();
+  // Accepts an explicit socket instance so listeners are guaranteed to be
+  // on the same socket that ensureConnected() will use/return.
+  const setupSocket = useCallback((socket: ReturnType<typeof getSocket>) => {
 
     // ── Meeting event handlers ──
 
@@ -207,7 +208,7 @@ export default function MeetingRoomPage() {
           .then((offer) => pc.setLocalDescription(offer).then(() => offer))
           .then((offer) => {
             console.log("[WebRTC] Sending offer to:", p.peer_id);
-            socket.emit(MeetingEvents.OFFER, {
+            getSocket().emit(MeetingEvents.OFFER, {
               meeting_code: code,
               target_peer_id: p.peer_id,
               offer,
@@ -241,7 +242,7 @@ export default function MeetingRoomPage() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log("[WebRTC] Sending offer to:", data.peer_id);
-      socket.emit(MeetingEvents.OFFER, {
+      getSocket().emit(MeetingEvents.OFFER, {
         meeting_code: code,
         target_peer_id: data.peer_id,
         offer,
@@ -268,7 +269,7 @@ export default function MeetingRoomPage() {
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit(MeetingEvents.ANSWER, {
+      getSocket().emit(MeetingEvents.ANSWER, {
         meeting_code: code,
         target_peer_id: data.sender_peer_id,
         answer,
@@ -328,6 +329,10 @@ export default function MeetingRoomPage() {
       router.push("/meetings");
     };
 
+    const onError = (data: { message?: string }) => {
+      console.error("[Meeting] Server error:", data?.message || data);
+    };
+
     // ── Attach all listeners ──
     socket.on(MeetingEvents.EXISTING_PARTICIPANTS, onExistingParticipants);
     socket.on(MeetingEvents.USER_JOINED, onUserJoined);
@@ -340,6 +345,7 @@ export default function MeetingRoomPage() {
     socket.on(MeetingEvents.TOGGLE_VIDEO, onToggleVideo);
     socket.on(MeetingEvents.REACTION, onReaction);
     socket.on(MeetingEvents.MEETING_ENDED, onMeetingEnded);
+    socket.on("error", onError);
 
     // Return teardown function that removes ONLY our listeners
     return () => {
@@ -354,6 +360,7 @@ export default function MeetingRoomPage() {
       socket.off(MeetingEvents.TOGGLE_VIDEO, onToggleVideo);
       socket.off(MeetingEvents.REACTION, onReaction);
       socket.off(MeetingEvents.MEETING_ENDED, onMeetingEnded);
+      socket.off("error", onError);
     };
   }, [code, createPeerConnection, router]);
 
@@ -380,28 +387,30 @@ export default function MeetingRoomPage() {
       });
       localStreamRef.current = stream;
 
-      // Get the shared socket and attach meeting listeners FIRST
-      const socket = getSocket();
-
       // Remove any stale meeting listeners from a previous join
       if (teardownRef.current) {
         teardownRef.current();
         teardownRef.current = null;
       }
 
-      // Attach all meeting event listeners
-      const teardown = setupSocket();
+      // Get the socket that ensureConnected will actually use/connect.
+      // Call BEFORE attaching listeners so everything is on the same instance.
+      const socket = ensureConnected();
+
+      // Attach all meeting event listeners on the actual socket
+      const teardown = setupSocket(socket);
       teardownRef.current = teardown;
 
-      // Function to emit join-meeting
+      // Helper: always emit join-meeting on the CURRENT socket, not a stale ref
       const emitJoin = () => {
-        console.log("[Meeting] Emitting join-meeting:", {
+        const s = getSocket();
+        console.log("[Meeting] Emitting join-meeting on socket:", s?.id, {
           meeting_code: code,
           peer_id: myPeerId,
           user_id: user?.id,
           display_name: user?.full_name || user?.first_name || "User",
         });
-        socket.emit(MeetingEvents.JOIN, {
+        s.emit(MeetingEvents.JOIN, {
           meeting_code: code,
           peer_id: myPeerId,
           user_id: user?.id || null,
@@ -411,7 +420,8 @@ export default function MeetingRoomPage() {
 
       // Track connection state
       const onConnect = () => {
-        console.log("[Meeting] Socket connected, id:", socket.id);
+        const s = getSocket();
+        console.log("[Meeting] Socket connected, id:", s.id);
         setIsConnected(true);
         // Emit join-meeting whenever we (re)connect so the server
         // knows we're in the room even after a reconnection.
@@ -428,6 +438,10 @@ export default function MeetingRoomPage() {
         setIsConnected(false);
       };
 
+      // Get the socket that ensureConnected will actually use/connect
+      // (already obtained above — reuse it)
+
+      // Attach connection lifecycle listeners on the ACTUAL socket
       socket.on("connect", onConnect);
       socket.on("disconnect", onDisconnect);
       socket.on("connect_error", onConnectError);
@@ -441,14 +455,14 @@ export default function MeetingRoomPage() {
         socket.off("connect_error", onConnectError);
       };
 
-      // NOW connect — all listeners are attached first
+      // If the socket is already connected (ensureConnected is idempotent),
+      // the "connect" event won't fire again, so emit join directly.
       if (socket.connected) {
         console.log("[Meeting] Socket already connected, joining immediately");
         setIsConnected(true);
         emitJoin();
       } else {
-        console.log("[Meeting] Connecting socket...");
-        ensureConnected();
+        console.log("[Meeting] Waiting for socket to connect...");
       }
 
       joinedRef.current = true;

@@ -465,6 +465,42 @@ export default function MeetingRoomPage() {
         console.log("[Meeting] Waiting for socket to connect...");
       }
 
+      // Safety net: re-emit join-meeting periodically for the first 15s to
+      // handle cases where the initial emit was lost during transport switch.
+      // Stops once we receive existing-participants (proving backend got it).
+      let rejoinAttempts = 0;
+      const maxRejoinAttempts = 5;
+      let backendAcked = false;
+
+      const onAcked = () => { backendAcked = true; };
+      socket.once(MeetingEvents.EXISTING_PARTICIPANTS, onAcked);
+
+      const rejoinInterval = setInterval(() => {
+        rejoinAttempts++;
+        if (backendAcked || rejoinAttempts > maxRejoinAttempts) {
+          clearInterval(rejoinInterval);
+          socket.off(MeetingEvents.EXISTING_PARTICIPANTS, onAcked);
+          if (backendAcked) {
+            console.log("[Meeting] Backend acknowledged join — stopping re-join.");
+          } else {
+            console.log("[Meeting] Re-join attempts exhausted.");
+          }
+          return;
+        }
+        if (socket.connected) {
+          console.log(`[Meeting] Re-join safety attempt ${rejoinAttempts}/${maxRejoinAttempts}`);
+          emitJoin();
+        }
+      }, 3000);
+
+      // Clean up interval on teardown
+      const prevTeardown2 = teardownRef.current;
+      teardownRef.current = () => {
+        prevTeardown2?.();
+        clearInterval(rejoinInterval);
+        socket.off(MeetingEvents.EXISTING_PARTICIPANTS, onAcked);
+      };
+
       joinedRef.current = true;
       setJoined(true);
     } catch (err: any) {

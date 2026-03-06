@@ -18,9 +18,9 @@ function createSocket(): Socket {
   const s = io(SOCKET_URL, {
     autoConnect: false, // we connect manually after attaching listeners
     path: "/socket.io/", // explicit default path
-    transports: ["polling", "websocket"], // polling first for reliable handshake, then upgrade
+    transports: ["websocket", "polling"], // websocket first for persistent connection; polling fallback
     upgrade: true,
-    rememberUpgrade: false,
+    rememberUpgrade: true,
     timeout: 30000,
     reconnection: true,
     reconnectionAttempts: Infinity, // never give up reconnecting
@@ -52,6 +52,16 @@ function createSocket(): Socket {
 
   s.on("connect_error", (err) => {
     console.error("[Socket] ❌ Connect error:", err.message);
+    // If websocket-only handshake fails (e.g. proxy blocking), add polling fallback
+    const currentTransports = s.io.opts.transports;
+    if (
+      currentTransports &&
+      currentTransports.length === 1 &&
+      currentTransports[0] === "websocket"
+    ) {
+      console.log("[Socket] Adding polling fallback...");
+      s.io.opts.transports = ["polling", "websocket"];
+    }
   });
 
   s.on("disconnect", (reason) => {

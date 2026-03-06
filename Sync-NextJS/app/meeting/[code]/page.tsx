@@ -381,8 +381,7 @@ export default function MeetingRoomPage() {
       localStreamRef.current = stream;
 
       // Get the shared socket and attach meeting listeners FIRST
-      // ensureConnected() will recreate a stale socket if needed
-      const socket = ensureConnected();
+      const socket = getSocket();
 
       // Remove any stale meeting listeners from a previous join
       if (teardownRef.current) {
@@ -422,17 +421,6 @@ export default function MeetingRoomPage() {
       const onDisconnect = (reason: string) => {
         console.warn("[Meeting] Socket disconnected:", reason);
         setIsConnected(false);
-
-        // If the server forcefully disconnected us and the socket module
-        // already handles reconnection, we still want to ensure it's trying.
-        // For "transport close" / "ping timeout", Socket.IO auto-reconnects.
-        if (reason === "io server disconnect" || reason === "transport close") {
-          console.log("[Meeting] Ensuring reconnection after:", reason);
-          setTimeout(() => {
-            // ensureConnected will recreate a stale socket if needed
-            ensureConnected();
-          }, 1000);
-        }
       };
 
       const onConnectError = (err: Error) => {
@@ -453,14 +441,14 @@ export default function MeetingRoomPage() {
         socket.off("connect_error", onConnectError);
       };
 
-      // Now connect (or if already connected, just emit join)
+      // NOW connect — all listeners are attached first
       if (socket.connected) {
         console.log("[Meeting] Socket already connected, joining immediately");
         setIsConnected(true);
         emitJoin();
       } else {
         console.log("[Meeting] Connecting socket...");
-        // socket is already being connected by ensureConnected() above
+        ensureConnected();
       }
 
       joinedRef.current = true;

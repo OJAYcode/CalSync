@@ -18,12 +18,12 @@ function createSocket(): Socket {
   const s = io(SOCKET_URL, {
     autoConnect: false, // we connect manually after attaching listeners
     path: "/socket.io/", // explicit default path
-    transports: ["websocket", "polling"], // prefer websocket — avoids sticky-session issues on Render/Vercel
+    transports: ["polling", "websocket"], // polling first for reliable handshake, then upgrade
     upgrade: true,
-    rememberUpgrade: true,
+    rememberUpgrade: false,
     timeout: 30000,
     reconnection: true,
-    reconnectionAttempts: Infinity, // never give up
+    reconnectionAttempts: Infinity, // never give up reconnecting
     reconnectionDelay: 1000,
     reconnectionDelayMax: 15000,
     randomizationFactor: 0.5,
@@ -52,11 +52,6 @@ function createSocket(): Socket {
 
   s.on("connect_error", (err) => {
     console.error("[Socket] ❌ Connect error:", err.message);
-    // If websocket-only fails, temporarily allow polling fallback
-    if (s.io.opts.transports?.length === 1) {
-      console.log("[Socket] Falling back to polling + websocket");
-      s.io.opts.transports = ["polling", "websocket"];
-    }
   });
 
   s.on("disconnect", (reason) => {
@@ -94,6 +89,8 @@ export function getSocket(): Socket {
  * Refreshes the auth token before connecting in case user re-logged in.
  * If the old socket instance is in a broken state, recreates it.
  */
+let hasConnectedOnce = false;
+
 export function ensureConnected(): Socket {
   if (typeof window === "undefined") {
     return null as unknown as Socket;
@@ -101,11 +98,13 @@ export function ensureConnected(): Socket {
 
   let s = getSocket();
 
-  // If the socket's manager has given up reconnecting (disconnected + not
-  // reconnecting), tear it down and create a fresh one so we get a clean slate.
-  if (!s.connected && !s.active) {
+  // Only check for staleness if we previously connected at least once.
+  // A brand-new socket (autoConnect:false) has active=false before the
+  // first .connect() call, so we must not treat that as stale.
+  if (hasConnectedOnce && !s.connected && !s.active) {
     console.log("[Socket] Instance stale — recreating...");
     destroySocket();
+    hasConnectedOnce = false;
     socket = createSocket();
     s = socket;
   }
@@ -113,6 +112,14 @@ export function ensureConnected(): Socket {
   if (!s.connected) {
     const token = localStorage.getItem("session_token");
     s.auth = token ? { token } : {};
+
+    // Track that we've initiated a connection at least once
+    if (!hasConnectedOnce) {
+      s.once("connect", () => {
+        hasConnectedOnce = true;
+      });
+    }
+
     s.connect();
   }
   return s;
@@ -132,6 +139,7 @@ export function destroySocket(): void {
     }
     socket = null;
   }
+  hasConnectedOnce = false;
 }
 
 // ────────────────────────────────────────────────────────────────────
